@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Download, Edit3, Printer, Plus, Trash2, Calendar, X, Bold, Italic, Underline, Type, Palette } from 'lucide-react';
+import { Download, Edit3, Printer, Plus, Trash2, Calendar, X, Bold, Italic, Underline, Type, Palette, Save, FolderOpen } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
@@ -14,12 +14,19 @@ const QuotationForm = () => {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [isEditing, setIsEditing] = useState(true);
   const [showTextEditor, setShowTextEditor] = useState({ id: null, field: null });
+  const [exchangeRates, setExchangeRates] = useState({});
+  const [savedQuotations, setSavedQuotations] = useState([]);
+  const [showSavedQuotations, setShowSavedQuotations] = useState(false);
+  const [currentQuotationId, setCurrentQuotationId] = useState(null);
   const [formData, setFormData] = useState({
     clientName: '',
     address: '',
     contactPerson: '',
     phone: '',
     amount: '',
+    baseCurrency: 'INR',
+    displayCurrency: 'INR',
+    baseAmount: '',
     bankName: 'Karnataka Bank (Zirakpur)',
     accountNumber: '0899202400002001',
     accountName: 'Building India Digital',
@@ -35,6 +42,76 @@ const QuotationForm = () => {
 
   const textEditorRef = useRef(null);
   const calendarRef = useRef(null);
+
+  const currencySymbols = {
+    'INR': '₹',
+    'USD': '$',
+    'EUR': '€',
+    'GBP': '£',
+    'AED': 'د.إ',
+    'SAR': '﷼',
+    'CAD': 'C$',
+    'AUD': 'A$'
+  };
+
+  // Load saved quotations from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('bid_quotations');
+    if (saved) {
+      setSavedQuotations(JSON.parse(saved));
+    }
+  }, []);
+
+  // Save quotations to localStorage whenever they change
+  useEffect(() => {
+    if (savedQuotations.length > 0) {
+      localStorage.setItem('bid_quotations', JSON.stringify(savedQuotations));
+    }
+  }, [savedQuotations]);
+
+  // Fetch exchange rates
+  const fetchExchangeRates = async () => {
+    try {
+      const response = await fetch('https://api.exchangerate-api.com/v4/latest/INR');
+      const data = await response.json();
+      setExchangeRates(data.rates);
+    } catch (error) {
+      console.error('Error fetching exchange rates:', error);
+      setExchangeRates({
+        INR: 1,
+        USD: 0.012,
+        EUR: 0.011,
+        GBP: 0.0095,
+        AED: 0.044,
+        SAR: 0.045,
+        CAD: 0.017,
+        AUD: 0.019
+      });
+    }
+  };
+
+  useEffect(() => {
+    fetchExchangeRates();
+  }, []);
+
+  const convertAmount = (amount, fromCurrency, toCurrency) => {
+    if (!amount || !exchangeRates[fromCurrency] || !exchangeRates[toCurrency]) {
+      return '';
+    }
+    
+    const numAmount = parseFloat(amount.replace(/,/g, ''));
+    if (isNaN(numAmount)) return '';
+    
+    const inINR = numAmount / exchangeRates[fromCurrency];
+    const converted = inINR * exchangeRates[toCurrency];
+    
+    return converted.toFixed(2);
+  };
+
+  const formatNumber = (num) => {
+    if (!num) return '';
+    return parseFloat(num).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
 
   const generateQuotationInfo = (selectedDate = new Date()) => {
     const date = selectedDate;
@@ -107,6 +184,104 @@ const QuotationForm = () => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
+  const handleCurrencyChange = (newCurrency) => {
+    if (formData.baseAmount) {
+      const converted = convertAmount(formData.baseAmount, formData.baseCurrency, newCurrency);
+      setFormData(prev => ({
+        ...prev,
+        displayCurrency: newCurrency,
+        amount: formatNumber(converted)
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        displayCurrency: newCurrency
+      }));
+    }
+  };
+
+  const handleAmountChange = (value) => {
+    const cleanValue = value.replace(/,/g, '');
+    setFormData(prev => ({
+      ...prev,
+      amount: value,
+      baseAmount: cleanValue,
+      baseCurrency: prev.displayCurrency
+    }));
+  };
+
+  // Save current quotation
+  const saveQuotation = () => {
+    const quotationData = {
+      id: currentQuotationId || Date.now(),
+      formData: { ...formData },
+      subscriptionItems: [...subscriptionItems],
+      quotationInfo: { ...quotationInfo },
+      savedAt: new Date().toISOString(),
+      baseQuotationNumber: quotationInfo.number.split('/R')[0] // Store base number without revision
+    };
+
+    if (currentQuotationId) {
+      // Update existing quotation
+      setSavedQuotations(prev => 
+        prev.map(q => q.id === currentQuotationId ? quotationData : q)
+      );
+    } else {
+      // Save new quotation
+      setSavedQuotations(prev => [...prev, quotationData]);
+      setCurrentQuotationId(quotationData.id);
+    }
+
+    alert('Quotation saved successfully!');
+  };
+
+  // Load a saved quotation
+  const loadQuotation = (quotation) => {
+    setFormData(quotation.formData);
+    setSubscriptionItems(quotation.subscriptionItems);
+    setQuotationInfo(quotation.quotationInfo);
+    setCurrentQuotationId(quotation.id);
+    setShowSavedQuotations(false);
+  };
+
+  // Mark as revised - creates a new revision from current quotation
+  const markAsRevised = () => {
+    if (!currentQuotationId) {
+      alert('Please save the quotation first before marking as revised!');
+      return;
+    }
+
+    // Find the base quotation
+    const baseQuotation = savedQuotations.find(q => q.id === currentQuotationId);
+    if (!baseQuotation) {
+      alert('Original quotation not found!');
+      return;
+    }
+
+    // Calculate next revision number
+    const baseNumber = baseQuotation.baseQuotationNumber;
+    const relatedQuotations = savedQuotations.filter(q => 
+      q.baseQuotationNumber === baseNumber
+    );
+    const maxRevision = Math.max(
+      0,
+      ...relatedQuotations.map(q => q.formData.revisionNumber || 0)
+    );
+    const nextRevision = maxRevision + 1;
+
+    // Create revised quotation
+    setFormData(prev => ({
+      ...prev,
+      isRevised: true,
+      revisionNumber: nextRevision
+    }));
+
+    // Generate new ID for revised version
+    setCurrentQuotationId(null);
+
+    alert(`Quotation marked as Revision ${nextRevision}. Please make your changes and save.`);
+  };
+
   const generateNewQuotation = () => {
     setQuotationInfo(prev => ({
       ...prev,
@@ -118,14 +293,18 @@ const QuotationForm = () => {
       contactPerson: '',
       phone: '',
       amount: '',
+      baseCurrency: 'INR',
+      displayCurrency: 'INR',
+      baseAmount: '',
       bankName: 'Karnataka Bank (Zirakpur)',
       accountNumber: '0899202400002001',
       accountName: 'Building India Digital',
       ifscCode: 'KARB0000899',
-      isRevised: formData.isRevised,
-      revisionNumber: formData.revisionNumber
+      isRevised: false,
+      revisionNumber: 0
     });
     setSubscriptionItems([{ id: 1, serialNumber: '', subscription: '' }]);
+    setCurrentQuotationId(null);
   };
 
   const handleDateSelect = (date) => {
@@ -134,21 +313,6 @@ const QuotationForm = () => {
   };
 
   const toggleEditMode = () => setIsEditing(!isEditing);
-
-  const toggleRevised = () => {
-    setFormData(prev => ({
-      ...prev,
-      isRevised: !prev.isRevised,
-      revisionNumber: !prev.isRevised ? 1 : 0
-    }));
-  };
-
-  const updateRevisionNumber = (increment) => {
-    setFormData(prev => ({
-      ...prev,
-      revisionNumber: Math.max(0, prev.revisionNumber + increment)
-    }));
-  };
 
   const openTextEditor = (id, field, content) => {
     if (!isEditing) return;
@@ -194,21 +358,18 @@ const QuotationForm = () => {
     const element = document.getElementById('quotation-form');
     if (!element) return;
 
-    // Create temporary container
     const container = document.createElement('div');
     container.style.cssText = 'position:fixed;left:-10000px;top:0;width:794px;background:#fff;font-family:Arial,sans-serif;';
     document.body.appendChild(container);
 
-    // Clone and clean element
     const clone = element.cloneNode(true);
     clone.querySelectorAll('.no-print').forEach(el => el.remove());
     
-    // Force all styles inline with proper text rendering
     clone.querySelectorAll('*').forEach(el => {
       el.removeAttribute('class');
       const tag = el.tagName.toLowerCase();
       
-      if (tag === 'input' || tag === 'textarea') {
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') {
         const value = el.value || el.placeholder || '';
         el.outerHTML = `<div style="font-size:14px;color:#000;padding:6px 0;border-bottom:1px solid #e5e7eb;min-height:24px;">${value}</div>`;
       } else if (tag === 'table') {
@@ -276,6 +437,15 @@ const QuotationForm = () => {
   };
 
   const handlePrint = () => window.print();
+
+  const deleteQuotation = (id) => {
+    if (window.confirm('Are you sure you want to delete this quotation?')) {
+      setSavedQuotations(prev => prev.filter(q => q.id !== id));
+      if (currentQuotationId === id) {
+        setCurrentQuotationId(null);
+      }
+    }
+  };
 
   const CalendarComponent = ({ onDateSelect }) => {
     const [currentDate, setCurrentDate] = useState(new Date());
@@ -376,9 +546,20 @@ const QuotationForm = () => {
           <div style={{display:'flex',flexWrap:'wrap',gap:'16px',justifyContent:'space-between',alignItems:'center'}}>
             <div style={{display:'flex',flexDirection:'column',gap:'12px'}}>
               <h2 style={{fontSize:'20px',fontWeight:'bold',color:'#1f2937',margin:0}}>Quotation Generator</h2>
-              <button onClick={generateNewQuotation} style={{padding:'8px 16px',background:'#3b82f6',color:'#fff',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'14px'}}>
-                Generate New Quotation
-              </button>
+              <div style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>
+                <button onClick={generateNewQuotation} style={{padding:'8px 16px',background:'#3b82f6',color:'#fff',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'14px'}}>
+                  Generate New Quotation
+                </button>
+                <button onClick={saveQuotation} style={{display:'flex',alignItems:'center',gap:'8px',padding:'8px 16px',background:'#10b981',color:'#fff',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'14px'}}>
+                  <Save size={16} /> Save Quotation
+                </button>
+                <button onClick={() => setShowSavedQuotations(!showSavedQuotations)} style={{display:'flex',alignItems:'center',gap:'8px',padding:'8px 16px',background:'#f59e0b',color:'#fff',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'14px'}}>
+                  <FolderOpen size={16} /> Saved ({savedQuotations.length})
+                </button>
+                <button onClick={markAsRevised} style={{padding:'8px 16px',background:'#ef4444',color:'#fff',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'14px'}}>
+                  Mark as Revised
+                </button>
+              </div>
             </div>
             <div style={{display:'flex',gap:'8px'}}>
               <button onClick={downloadPDF} style={{display:'flex',alignItems:'center',gap:'8px',padding:'8px 16px',background:'#10b981',color:'#fff',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'14px'}}>
@@ -389,6 +570,47 @@ const QuotationForm = () => {
               </button>
             </div>
           </div>
+
+          {/* Saved Quotations Modal */}
+          {showSavedQuotations && (
+            <div style={{marginTop:'16px',maxHeight:'400px',overflowY:'auto',border:'1px solid #e5e7eb',borderRadius:'8px',padding:'16px',background:'#f9fafb'}}>
+              <h3 style={{fontSize:'16px',fontWeight:'bold',marginBottom:'12px',color:'#1f2937'}}>Saved Quotations</h3>
+              {savedQuotations.length === 0 ? (
+                <p style={{color:'#6b7280',fontSize:'14px'}}>No saved quotations yet.</p>
+              ) : (
+                <div style={{display:'flex',flexDirection:'column',gap:'8px'}}>
+                  {savedQuotations.map((quot) => (
+                    <div key={quot.id} style={{background:'#fff',padding:'12px',borderRadius:'6px',border:'1px solid #e5e7eb',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                      <div style={{flex:1}}>
+                        <div style={{fontWeight:'600',color:'#1f2937',fontSize:'14px'}}>
+                          {quot.quotationInfo.number}
+                          {quot.formData.isRevised && (
+                            <span style={{marginLeft:'8px',padding:'2px 8px',background:'#fed7aa',color:'#c2410c',borderRadius:'4px',fontSize:'12px'}}>
+                              R{quot.formData.revisionNumber}
+                            </span>
+                          )}
+                        </div>
+                        <div style={{fontSize:'12px',color:'#6b7280',marginTop:'4px'}}>
+                          Client: {quot.formData.clientName || 'N/A'} | Amount: {quot.formData.amount || 'N/A'}
+                        </div>
+                        <div style={{fontSize:'11px',color:'#9ca3af',marginTop:'2px'}}>
+                          Saved: {new Date(quot.savedAt).toLocaleString()}
+                        </div>
+                      </div>
+                      <div style={{display:'flex',gap:'8px'}}>
+                        <button onClick={() => loadQuotation(quot)} style={{padding:'6px 12px',background:'#3b82f6',color:'#fff',border:'none',borderRadius:'4px',cursor:'pointer',fontSize:'12px'}}>
+                          Load
+                        </button>
+                        <button onClick={() => deleteQuotation(quot.id)} style={{padding:'6px 12px',background:'#ef4444',color:'#fff',border:'none',borderRadius:'4px',cursor:'pointer',fontSize:'12px'}}>
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -442,16 +664,6 @@ const QuotationForm = () => {
                   <button onClick={() => setShowDatePicker(!showDatePicker)} style={{padding:'8px',background:'transparent',border:'none',color:'#3b82f6',cursor:'pointer'}}>
                     <Calendar size={18} />
                   </button>
-                  <button onClick={toggleRevised} style={{padding:'4px 12px',fontSize:'14px',borderRadius:'4px',border:'1px solid',background:formData.isRevised?'#fed7aa':'#f3f4f6',color:formData.isRevised?'#c2410c':'#4b5563',borderColor:formData.isRevised?'#fdba74':'#d1d5db',cursor:'pointer'}}>
-                    {formData.isRevised ? 'Revised' : 'Mark Revised'}
-                  </button>
-                  {formData.isRevised && (
-                    <div style={{display:'flex',alignItems:'center',gap:'4px'}}>
-                      <button onClick={() => updateRevisionNumber(-1)} style={{width:'24px',height:'24px',background:'#e5e7eb',border:'none',borderRadius:'4px',cursor:'pointer'}}>-</button>
-                      <span style={{fontSize:'12px',fontWeight:'500'}}>R{formData.revisionNumber}</span>
-                      <button onClick={() => updateRevisionNumber(1)} style={{width:'24px',height:'24px',background:'#e5e7eb',border:'none',borderRadius:'4px',cursor:'pointer'}}>+</button>
-                    </div>
-                  )}
                 </div>
                 {showDatePicker && (
                   <div ref={calendarRef} style={{position:'absolute',zIndex:40,top:'100%',left:'50%',transform:'translateX(-50%)',marginTop:'8px'}} className="no-print">
@@ -569,11 +781,38 @@ const QuotationForm = () => {
             </div>
           </div>
 
-          {/* Amount & Payment Details Combined Page */}
+          {/* Amount Section */}
           <div style={{padding:'12px 24px',borderBottom:'1px solid #1f2937'}}>
             <h3 style={{fontSize:'16px',fontWeight:'bold',color:'#000',marginBottom:'6px',margin:0}}>AMOUNT</h3>
-            <input type="text" value={formData.amount} onChange={(e) => handleFormChange('amount', e.target.value)} placeholder="Enter amount (e.g., 17,500/-)" style={{width:'100%',padding:'6px 12px',fontSize:'22px',fontWeight:'bold',color:'#000',border:'1px solid #d1d5db',borderRadius:'6px',marginTop:'6px'}} />
-            <div style={{fontSize:'13px',color:'#000',marginTop:'3px'}}>(GST EXTRA)</div>
+            
+            <div style={{display:'flex',gap:'12px',alignItems:'stretch',marginTop:'6px',flexWrap:'wrap'}}>
+              <select 
+                value={formData.displayCurrency} 
+                onChange={(e) => handleCurrencyChange(e.target.value)}
+                style={{padding:'6px 12px',fontSize:'18px',fontWeight:'bold',color:'#000',border:'1px solid #d1d5db',borderRadius:'6px',background:'#fff',cursor:'pointer',minWidth:'120px'}}
+              >
+                {Object.keys(currencySymbols).map(code => (
+                  <option key={code} value={code}>
+                    {code} ({currencySymbols[code]})
+                  </option>
+                ))}
+              </select>
+              
+              <input 
+                type="text" 
+                value={formData.amount} 
+                onChange={(e) => handleAmountChange(e.target.value)} 
+                placeholder="Enter amount" 
+                style={{flex:1,padding:'6px 12px',fontSize:'22px',fontWeight:'bold',color:'#000',border:'1px solid #d1d5db',borderRadius:'6px',minWidth:'200px'}} 
+              />
+            </div>
+            
+            <div style={{marginTop:'6px',fontSize:'13px',color:'#000'}}>
+              <span style={{fontWeight:'600',fontSize:'16px'}}>
+                {currencySymbols[formData.displayCurrency]} {formData.amount || '0'}
+              </span>
+              <span style={{marginLeft:'8px',fontWeight:'500'}}>(GST EXTRA)</span>
+            </div>
           </div>
 
           {/* Payment Details */}
@@ -624,7 +863,7 @@ const QuotationForm = () => {
             <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(250px, 1fr))',gap:'24px'}}>
               <div style={{textAlign:'center'}}>
                 <h3 style={{fontSize:'16px',fontWeight:'bold',color:'#000',marginBottom:'12px'}}>CLIENT SIGNATURE</h3>
-                <div style={{border:'2px solid #1f2937',padding:'16px',height:'160px',display:'flex',alignItems:'center',justifyContent:'center',background:'#fff'}}>
+                <div style={{border:'2px solid #1f2937',padding:'16px',height:'120px',display:'flex',alignItems:'center',justifyContent:'center',background:'#fff'}}>
                   <div style={{textAlign:'center',color:'#000'}}>
                     <div style={{fontSize:'24px',marginBottom:'8px'}}>✎</div>
                     <div style={{fontSize:'14px'}}>Signature Space</div>
@@ -634,11 +873,11 @@ const QuotationForm = () => {
               </div>
               <div style={{textAlign:'center'}}>
                 <h3 style={{fontSize:'16px',fontWeight:'bold',color:'#000',marginBottom:'12px'}}>ORGANISATION SIGNATURE</h3>
-                <div style={{border:'2px solid #1f2937',padding:'12px',height:'160px',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                <div style={{border:'2px solid #1f2937',padding:'0',height:'120px',display:'flex',alignItems:'center',justifyContent:'center',background:'#fff',overflow:'hidden'}}>
                   <img 
                     src={signatureImage} 
                     alt="Organisation Signature" 
-                    style={{maxWidth:'100%',maxHeight:'100%',objectFit:'contain',opacity:'0.9'}}
+                    style={{width:'100%',height:'100%',objectFit:'contain',opacity:'1',transform:'scale(2.2)'}}
                   />
                 </div>
               </div>
@@ -740,7 +979,7 @@ const QuotationForm = () => {
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
-          input, textarea {
+          input, textarea, select {
             border: none !important;
             background: transparent !important;
             color: #000 !important;
