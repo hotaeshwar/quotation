@@ -1,10 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Download, Edit3, Printer, Plus, Trash2, Calendar, X, Bold, Italic, Underline, Type, Palette, Save, FolderOpen } from 'lucide-react';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
+import { Download, Edit3, Plus, Trash2, Calendar, X, Save, FolderOpen, MapPin, Phone, Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, Type, Copy, Scissors, AlignJustify, List, ListOrdered, ArrowUp, ArrowDown } from 'lucide-react';
 
-// Import your local images
-import bidLogo from '../assets/images/bid.png';
+import bidLogo from '../assets/images/bid2.png';
 import signatureImage from '../assets/images/signature1.png';
 
 const QuotationForm = () => {
@@ -18,6 +15,17 @@ const QuotationForm = () => {
   const [savedQuotations, setSavedQuotations] = useState([]);
   const [showSavedQuotations, setShowSavedQuotations] = useState(false);
   const [currentQuotationId, setCurrentQuotationId] = useState(null);
+  
+  const [editorState, setEditorState] = useState({
+    content: '',
+    fontSize: '16px',
+    fontFamily: 'Arial, sans-serif',
+    textAlign: 'left',
+    isBold: false,
+    isItalic: false,
+    isUnderline: false
+  });
+  
   const [formData, setFormData] = useState({
     clientName: '',
     address: '',
@@ -40,7 +48,7 @@ const QuotationForm = () => {
     referenceNumber: 0
   });
 
-  const textEditorRef = useRef(null);
+  const editorRef = useRef(null);
   const calendarRef = useRef(null);
 
   const currencySymbols = {
@@ -54,7 +62,23 @@ const QuotationForm = () => {
     'AUD': 'A$'
   };
 
-  // Load saved quotations from localStorage on mount
+  const fontFamilies = [
+    { name: 'Arial', value: 'Arial, sans-serif' },
+    { name: 'Times New Roman', value: 'Times New Roman, serif' },
+    { name: 'Georgia', value: 'Georgia, serif' },
+    { name: 'Verdana', value: 'Verdana, sans-serif' },
+    { name: 'Courier New', value: 'Courier New, monospace' },
+    { name: 'Tahoma', value: 'Tahoma, sans-serif' }
+  ];
+
+  const fontSizes = [
+    { name: 'Small', value: '14px' },
+    { name: 'Normal', value: '16px' },
+    { name: 'Large', value: '18px' },
+    { name: 'X-Large', value: '20px' },
+    { name: 'XX-Large', value: '24px' }
+  ];
+
   useEffect(() => {
     const saved = localStorage.getItem('bid_quotations');
     if (saved) {
@@ -62,14 +86,12 @@ const QuotationForm = () => {
     }
   }, []);
 
-  // Save quotations to localStorage whenever they change
   useEffect(() => {
     if (savedQuotations.length > 0) {
       localStorage.setItem('bid_quotations', JSON.stringify(savedQuotations));
     }
   }, [savedQuotations]);
 
-  // Fetch exchange rates
   const fetchExchangeRates = async () => {
     try {
       const response = await fetch('https://api.exchangerate-api.com/v4/latest/INR');
@@ -210,7 +232,6 @@ const QuotationForm = () => {
     }));
   };
 
-  // Save current quotation
   const saveQuotation = () => {
     const quotationData = {
       id: currentQuotationId || Date.now(),
@@ -218,16 +239,14 @@ const QuotationForm = () => {
       subscriptionItems: [...subscriptionItems],
       quotationInfo: { ...quotationInfo },
       savedAt: new Date().toISOString(),
-      baseQuotationNumber: quotationInfo.number.split('/R')[0] // Store base number without revision
+      baseQuotationNumber: quotationInfo.number.split('/R')[0]
     };
 
     if (currentQuotationId) {
-      // Update existing quotation
       setSavedQuotations(prev => 
         prev.map(q => q.id === currentQuotationId ? quotationData : q)
       );
     } else {
-      // Save new quotation
       setSavedQuotations(prev => [...prev, quotationData]);
       setCurrentQuotationId(quotationData.id);
     }
@@ -235,7 +254,6 @@ const QuotationForm = () => {
     alert('Quotation saved successfully!');
   };
 
-  // Load a saved quotation
   const loadQuotation = (quotation) => {
     setFormData(quotation.formData);
     setSubscriptionItems(quotation.subscriptionItems);
@@ -244,21 +262,18 @@ const QuotationForm = () => {
     setShowSavedQuotations(false);
   };
 
-  // Mark as revised - creates a new revision from current quotation
   const markAsRevised = () => {
     if (!currentQuotationId) {
       alert('Please save the quotation first before marking as revised!');
       return;
     }
 
-    // Find the base quotation
     const baseQuotation = savedQuotations.find(q => q.id === currentQuotationId);
     if (!baseQuotation) {
       alert('Original quotation not found!');
       return;
     }
 
-    // Calculate next revision number
     const baseNumber = baseQuotation.baseQuotationNumber;
     const relatedQuotations = savedQuotations.filter(q => 
       q.baseQuotationNumber === baseNumber
@@ -269,14 +284,12 @@ const QuotationForm = () => {
     );
     const nextRevision = maxRevision + 1;
 
-    // Create revised quotation
     setFormData(prev => ({
       ...prev,
       isRevised: true,
       revisionNumber: nextRevision
     }));
 
-    // Generate new ID for revised version
     setCurrentQuotationId(null);
 
     alert(`Quotation marked as Revision ${nextRevision}. Please make your changes and save.`);
@@ -314,129 +327,183 @@ const QuotationForm = () => {
 
   const toggleEditMode = () => setIsEditing(!isEditing);
 
-  const openTextEditor = (id, field, content) => {
+  const openTextEditor = (id, field) => {
     if (!isEditing) return;
-    setShowTextEditor({ id, field });
-    setTimeout(() => {
-      if (textEditorRef.current) {
-        textEditorRef.current.innerHTML = content || '';
-        textEditorRef.current.focus();
-      }
-    }, 100);
+    
+    const item = subscriptionItems.find(i => i.id === id);
+    if (item) {
+      setEditorState({
+        content: item[field] || '',
+        fontSize: '16px',
+        fontFamily: 'Arial, sans-serif',
+        textAlign: 'left',
+        isBold: false,
+        isItalic: false,
+        isUnderline: false
+      });
+      setShowTextEditor({ id, field });
+    }
   };
 
   const closeTextEditor = () => {
-    if (showTextEditor.id && textEditorRef.current) {
-      const content = textEditorRef.current.innerHTML;
-      updateSubscriptionItem(showTextEditor.id, showTextEditor.field, content);
+    if (showTextEditor.id) {
+      updateSubscriptionItem(showTextEditor.id, showTextEditor.field, editorState.content);
     }
     setShowTextEditor({ id: null, field: null });
   };
 
-  const toggleTextStyle = (command) => {
-    if (textEditorRef.current) {
-      textEditorRef.current.focus();
-      document.execCommand(command, false, null);
+  const updateEditorContent = (newContent) => {
+    setEditorState(prev => ({ ...prev, content: newContent }));
+  };
+
+  const updateEditorStyle = (field, value) => {
+    setEditorState(prev => ({ ...prev, [field]: value }));
+  };
+
+  const toggleTextStyle = (style) => {
+    setEditorState(prev => ({ ...prev, [style]: !prev[style] }));
+  };
+
+  // FIXED: Working text movement functions
+  const moveTextUp = () => {
+    const lines = editorState.content.split('\n');
+    if (lines.length > 1) {
+      const newLines = [...lines];
+      for (let i = 1; i < newLines.length; i++) {
+        [newLines[i-1], newLines[i]] = [newLines[i], newLines[i-1]];
+      }
+      updateEditorContent(newLines.join('\n'));
     }
   };
 
-  const changeFontSize = (increase) => {
-    if (textEditorRef.current) {
-      textEditorRef.current.focus();
-      document.execCommand('fontSize', false, increase ? '5' : '3');
+  const moveTextDown = () => {
+    const lines = editorState.content.split('\n');
+    if (lines.length > 1) {
+      const newLines = [...lines];
+      for (let i = newLines.length - 2; i >= 0; i--) {
+        [newLines[i], newLines[i+1]] = [newLines[i+1], newLines[i]];
+      }
+      updateEditorContent(newLines.join('\n'));
     }
   };
 
-  const changeTextColor = (color) => {
-    if (textEditorRef.current) {
-      textEditorRef.current.focus();
-      document.execCommand('foreColor', false, color);
+  const addBulletList = () => {
+    const currentText = editorState.content;
+    const lines = currentText.split('\n').filter(line => line.trim() !== '');
+    const bulletList = lines.map(line => `• ${line}`).join('\n');
+    updateEditorContent(bulletList);
+  };
+
+  const addNumberedList = () => {
+    const currentText = editorState.content;
+    const lines = currentText.split('\n').filter(line => line.trim() !== '');
+    const numberedList = lines.map((line, idx) => `${idx + 1}. ${line}`).join('\n');
+    updateEditorContent(numberedList);
+  };
+
+  const handleCopy = () => {
+    if (editorRef.current) {
+      editorRef.current.select();
+      document.execCommand('copy');
+    }
+  };
+
+  const handlePaste = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      updateEditorContent(editorState.content + text);
+    } catch (err) {
+      console.error('Failed to paste:', err);
+    }
+  };
+
+  const handleCut = () => {
+    if (editorRef.current) {
+      editorRef.current.select();
+      document.execCommand('cut');
     }
   };
 
   const downloadPDF = async () => {
-    const element = document.getElementById('quotation-form');
-    if (!element) return;
-
-    const container = document.createElement('div');
-    container.style.cssText = 'position:fixed;left:-10000px;top:0;width:794px;background:#fff;font-family:Arial,sans-serif;';
-    document.body.appendChild(container);
-
-    const clone = element.cloneNode(true);
-    clone.querySelectorAll('.no-print').forEach(el => el.remove());
-    
-    clone.querySelectorAll('*').forEach(el => {
-      el.removeAttribute('class');
-      const tag = el.tagName.toLowerCase();
-      
-      if (tag === 'input' || tag === 'textarea' || tag === 'select') {
-        const value = el.value || el.placeholder || '';
-        el.outerHTML = `<div style="font-size:14px;color:#000;padding:6px 0;border-bottom:1px solid #e5e7eb;min-height:24px;">${value}</div>`;
-      } else if (tag === 'table') {
-        el.style.cssText = 'border-collapse:collapse;width:100%;border:1px solid #000;background:#fff;';
-      } else if (tag === 'th') {
-        el.style.cssText = 'background:#e5e7eb;color:#000;border:1px solid #000;padding:12px;text-align:left;font-weight:bold;font-size:14px;';
-      } else if (tag === 'td') {
-        el.style.cssText = 'background:#fff;color:#000;border:1px solid #000;padding:12px;vertical-align:top;font-size:14px;';
-      } else if (tag === 'h3') {
-        el.style.cssText = 'font-size:18px;font-weight:bold;color:#000;margin:0 0 12px 0;';
-      } else if (tag === 'h4') {
-        el.style.cssText = 'font-size:11px;font-weight:bold;color:#000;margin:4px 0 2px 0;';
-      } else if (tag === 'p') {
-        el.style.cssText = 'font-size:11px;color:#000;margin:0 0 3px 0;line-height:1.5;';
-      } else if (tag === 'div') {
-        if (!el.style.fontSize) el.style.fontSize = '14px';
-        if (!el.style.color) el.style.color = '#000';
-      } else {
-        el.style.color = '#000';
-        el.style.backgroundColor = 'transparent';
-      }
-    });
-
-    container.appendChild(clone);
-
     try {
-      await new Promise(resolve => setTimeout(resolve, 300));
+      const { jsPDF } = await import('jspdf');
+      const html2canvas = (await import('html2canvas')).default;
+      
+      console.log('Starting PDF generation...');
+      
+      const page1 = document.querySelector('.page-1');
+      const page2 = document.querySelector('.page-2');
+      
+      if (!page1 || !page2) {
+        alert('Error: Could not find page elements.');
+        return;
+      }
 
-      const canvas = await html2canvas(container, {
-        scale: 2,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: '#ffffff',
-        logging: false,
-        width: 794,
-        height: container.scrollHeight,
+      console.log('Hiding no-print elements...');
+      const noPrintElements = document.querySelectorAll('.no-print');
+      noPrintElements.forEach(el => el.style.display = 'none');
+
+      const inputs = document.querySelectorAll('.page-1 input, .page-1 textarea');
+      const originalPlaceholders = [];
+      inputs.forEach(input => {
+        originalPlaceholders.push(input.placeholder);
+        input.placeholder = '';
       });
 
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const imgData = canvas.toDataURL('image/png', 1.0);
-      const imgWidth = 210;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      const pageHeight = 297;
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+        compress: true
+      });
+
+      const pdfWidth = 210;
+      const pdfHeight = 297;
+
+      console.log('Capturing Page 1...');
+      const canvas1 = await html2canvas(page1, {
+        scale: 3,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff'
+      });
+
+      const imgData1 = canvas1.toDataURL('image/jpeg', 0.98);
+      const imgHeight1 = (canvas1.height * pdfWidth) / canvas1.width;
+      pdf.addImage(imgData1, 'JPEG', 0, 0, pdfWidth, Math.min(imgHeight1, pdfHeight));
+
+      pdf.addPage();
+
+      console.log('Capturing Page 2...');
+      const canvas2 = await html2canvas(page2, {
+        scale: 3,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff'
+      });
+
+      const imgData2 = canvas2.toDataURL('image/jpeg', 0.98);
+      const imgHeight2 = (canvas2.height * pdfWidth) / canvas2.width;
+      pdf.addImage(imgData2, 'JPEG', 0, 0, pdfWidth, Math.min(imgHeight2, pdfHeight));
+
+      inputs.forEach((input, idx) => {
+        input.placeholder = originalPlaceholders[idx];
+      });
+      noPrintElements.forEach(el => el.style.display = '');
+
+      const filename = `quotation-${quotationInfo.number.replace(/\//g, '-')}.pdf`;
+      pdf.save(filename);
       
-      let position = 0;
-      let heightLeft = imgHeight;
-
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
-
-      while (heightLeft > 0) {
-        position = heightLeft - imgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
-      }
-
-      pdf.save(`BID-Quotation-${quotationInfo.number.replace(/\//g, '-')}.pdf`);
+      alert('✅ PDF generated successfully!');
+      
     } catch (error) {
-      console.error('PDF Error:', error);
-      alert('Error generating PDF: ' + error.message);
-    } finally {
-      document.body.removeChild(container);
+      console.error('Error generating PDF:', error);
+      alert('❌ Error: ' + error.message);
+      
+      const noPrintElements = document.querySelectorAll('.no-print');
+      noPrintElements.forEach(el => el.style.display = '');
     }
   };
-
-  const handlePrint = () => window.print();
 
   const deleteQuotation = (id) => {
     if (window.confirm('Are you sure you want to delete this quotation?')) {
@@ -538,6 +605,226 @@ const QuotationForm = () => {
     );
   };
 
+  const CustomTextEditor = () => {
+    return (
+      <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:50,padding:'16px'}} className="no-print">
+        <div style={{background:'#fff',borderRadius:'8px',padding:'24px',width:'100%',maxWidth:'900px',maxHeight:'90vh',overflow:'auto'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'16px'}}>
+            <h3 style={{fontSize:'20px',fontWeight:'bold',margin:0}}>Rich Text Editor</h3>
+            <button onClick={closeTextEditor} style={{background:'none',border:'none',cursor:'pointer',color:'#6b7280'}}>
+              <X size={24} />
+            </button>
+          </div>
+          
+          {/* Toolbar */}
+          <div style={{display:'flex',flexWrap:'wrap',gap:'8px',marginBottom:'16px',padding:'12px',background:'#f8f9fa',borderRadius:'6px',border:'1px solid #e9ecef'}}>
+            {/* Font Family */}
+            <select 
+              value={editorState.fontFamily}
+              onChange={(e) => updateEditorStyle('fontFamily', e.target.value)}
+              style={{padding:'6px 12px',border:'1px solid #d1d5db',borderRadius:'4px',background:'#fff',cursor:'pointer'}}
+            >
+              {fontFamilies.map(font => (
+                <option key={font.value} value={font.value}>{font.name}</option>
+              ))}
+            </select>
+
+            {/* Font Size */}
+            <select 
+              value={editorState.fontSize}
+              onChange={(e) => updateEditorStyle('fontSize', e.target.value)}
+              style={{padding:'6px 12px',border:'1px solid #d1d5db',borderRadius:'4px',background:'#fff',cursor:'pointer'}}
+            >
+              {fontSizes.map(size => (
+                <option key={size.value} value={size.value}>{size.name}</option>
+              ))}
+            </select>
+
+            {/* Text Alignment */}
+            <div style={{display:'flex',gap:'2px',background:'#fff',border:'1px solid #d1d5db',borderRadius:'4px',overflow:'hidden'}}>
+              <button 
+                onClick={() => updateEditorStyle('textAlign', 'left')}
+                style={{padding:'6px 10px',border:'none',background:editorState.textAlign === 'left' ? '#3b82f6' : '#fff',color:editorState.textAlign === 'left' ? '#fff' : '#374151',cursor:'pointer'}}
+                title="Align Left"
+              >
+                <AlignLeft size={16} />
+              </button>
+              <button 
+                onClick={() => updateEditorStyle('textAlign', 'center')}
+                style={{padding:'6px 10px',border:'none',background:editorState.textAlign === 'center' ? '#3b82f6' : '#fff',color:editorState.textAlign === 'center' ? '#fff' : '#374151',cursor:'pointer'}}
+                title="Align Center"
+              >
+                <AlignCenter size={16} />
+              </button>
+              <button 
+                onClick={() => updateEditorStyle('textAlign', 'right')}
+                style={{padding:'6px 10px',border:'none',background:editorState.textAlign === 'right' ? '#3b82f6' : '#fff',color:editorState.textAlign === 'right' ? '#fff' : '#374151',cursor:'pointer'}}
+                title="Align Right"
+              >
+                <AlignRight size={16} />
+              </button>
+              <button 
+                onClick={() => updateEditorStyle('textAlign', 'justify')}
+                style={{padding:'6px 10px',border:'none',background:editorState.textAlign === 'justify' ? '#3b82f6' : '#fff',color:editorState.textAlign === 'justify' ? '#fff' : '#374151',cursor:'pointer'}}
+                title="Justify"
+              >
+                <AlignJustify size={16} />
+              </button>
+            </div>
+
+            {/* Text Styles */}
+            <div style={{display:'flex',gap:'2px',background:'#fff',border:'1px solid #d1d5db',borderRadius:'4px',overflow:'hidden'}}>
+              <button 
+                onClick={() => toggleTextStyle('isBold')}
+                style={{padding:'6px 10px',border:'none',background:editorState.isBold ? '#3b82f6' : '#fff',color:editorState.isBold ? '#fff' : '#374151',cursor:'pointer'}}
+                title="Bold"
+              >
+                <Bold size={16} />
+              </button>
+              <button 
+                onClick={() => toggleTextStyle('isItalic')}
+                style={{padding:'6px 10px',border:'none',background:editorState.isItalic ? '#3b82f6' : '#fff',color:editorState.isItalic ? '#fff' : '#374151',cursor:'pointer'}}
+                title="Italic"
+              >
+                <Italic size={16} />
+              </button>
+              <button 
+                onClick={() => toggleTextStyle('isUnderline')}
+                style={{padding:'6px 10px',border:'none',background:editorState.isUnderline ? '#3b82f6' : '#fff',color:editorState.isUnderline ? '#fff' : '#374151',cursor:'pointer'}}
+                title="Underline"
+              >
+                <Underline size={16} />
+              </button>
+            </div>
+
+            {/* Lists */}
+            <div style={{display:'flex',gap:'2px',background:'#fff',border:'1px solid #d1d5db',borderRadius:'4px',overflow:'hidden'}}>
+              <button 
+                onClick={addBulletList}
+                style={{padding:'6px 10px',border:'none',background:'#fff',color:'#374151',cursor:'pointer'}}
+                title="Bullet List"
+              >
+                <List size={16} />
+              </button>
+              <button 
+                onClick={addNumberedList}
+                style={{padding:'6px 10px',border:'none',background:'#fff',color:'#374151',cursor:'pointer'}}
+                title="Numbered List"
+              >
+                <ListOrdered size={16} />
+              </button>
+            </div>
+
+            {/* Text Movement */}
+            <div style={{display:'flex',gap:'2px',background:'#fff',border:'1px solid #d1d5db',borderRadius:'4px',overflow:'hidden'}}>
+              <button 
+                onClick={moveTextUp}
+                style={{padding:'6px 10px',border:'none',background:'#fff',color:'#374151',cursor:'pointer'}}
+                title="Move Text Up"
+              >
+                <ArrowUp size={16} />
+              </button>
+              <button 
+                onClick={moveTextDown}
+                style={{padding:'6px 10px',border:'none',background:'#fff',color:'#374151',cursor:'pointer'}}
+                title="Move Text Down"
+              >
+                <ArrowDown size={16} />
+              </button>
+            </div>
+
+            {/* Copy/Paste/Cut */}
+            <div style={{display:'flex',gap:'2px',background:'#fff',border:'1px solid #d1d5db',borderRadius:'4px',overflow:'hidden'}}>
+              <button 
+                onClick={handleCopy}
+                style={{padding:'6px 10px',border:'none',background:'#fff',color:'#374151',cursor:'pointer'}}
+                title="Copy"
+              >
+                <Copy size={16} />
+              </button>
+              <button 
+                onClick={handlePaste}
+                style={{padding:'6px 10px',border:'none',background:'#fff',color:'#374151',cursor:'pointer'}}
+                title="Paste"
+              >
+                <Type size={16} />
+              </button>
+              <button 
+                onClick={handleCut}
+                style={{padding:'6px 10px',border:'none',background:'#fff',color:'#374151',cursor:'pointer'}}
+                title="Cut"
+              >
+                <Scissors size={16} />
+              </button>
+            </div>
+          </div>
+
+          <textarea
+            ref={editorRef}
+            value={editorState.content}
+            onChange={(e) => updateEditorContent(e.target.value)}
+            autoFocus
+            style={{
+              width: '100%',
+              minHeight: '300px',
+              padding: '16px',
+              border: '2px solid #d1d5db',
+              borderRadius: '6px',
+              fontSize: editorState.fontSize,
+              fontFamily: editorState.fontFamily,
+              textAlign: editorState.textAlign,
+              fontWeight: editorState.isBold ? 'bold' : 'normal',
+              fontStyle: editorState.isItalic ? 'italic' : 'normal',
+              textDecoration: editorState.isUnderline ? 'underline' : 'none',
+              resize: 'vertical',
+              lineHeight: '1.6',
+              outline: 'none'
+            }}
+            placeholder="Type your text here..."
+          />
+
+          {/* Preview */}
+          <div style={{marginTop:'16px'}}>
+            <h4 style={{fontSize:'16px',fontWeight:'bold',marginBottom:'8px'}}>Preview:</h4>
+            <div 
+              style={{
+                padding: '16px',
+                border: '1px solid #e5e7eb',
+                borderRadius: '6px',
+                background: '#f9fafb',
+                minHeight: '120px',
+                fontSize: editorState.fontSize,
+                fontFamily: editorState.fontFamily,
+                textAlign: editorState.textAlign,
+                fontWeight: editorState.isBold ? 'bold' : 'normal',
+                fontStyle: editorState.isItalic ? 'italic' : 'normal',
+                textDecoration: editorState.isUnderline ? 'underline' : 'none',
+                whiteSpace: 'pre-wrap'
+              }}
+            >
+              {editorState.content || 'Preview will appear here...'}
+            </div>
+          </div>
+          
+          <div style={{display:'flex',justifyContent:'flex-end',gap:'12px',marginTop:'20px'}}>
+            <button 
+              onClick={closeTextEditor} 
+              style={{padding:'10px 20px',background:'#6b7280',color:'#fff',border:'none',borderRadius:'6px',cursor:'pointer',fontWeight:'500',fontSize:'14px'}}
+            >
+              Cancel
+            </button>
+            <button 
+              onClick={closeTextEditor} 
+              style={{padding:'10px 20px',background:'#3b82f6',color:'#fff',border:'none',borderRadius:'6px',cursor:'pointer',fontWeight:'500',fontSize:'14px'}}
+            >
+              Apply Changes
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div style={{minHeight:'100vh',background:'#f3f4f6',padding:'16px'}} className="print-container">
       {/* Control Panel */}
@@ -545,44 +832,98 @@ const QuotationForm = () => {
         <div style={{background:'#fff',borderRadius:'8px',boxShadow:'0 1px 3px rgba(0,0,0,0.1)',padding:'16px'}}>
           <div style={{display:'flex',flexWrap:'wrap',gap:'16px',justifyContent:'space-between',alignItems:'center'}}>
             <div style={{display:'flex',flexDirection:'column',gap:'12px'}}>
-              <h2 style={{fontSize:'20px',fontWeight:'bold',color:'#1f2937',margin:0}}>Quotation Generator</h2>
+              <h2 style={{fontSize:'22px',fontWeight:'bold',color:'#1f2937',margin:0}}>Quotation Generator</h2>
               <div style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>
-                <button onClick={generateNewQuotation} style={{padding:'8px 16px',background:'#3b82f6',color:'#fff',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'14px'}}>
+                <button onClick={generateNewQuotation} style={{padding:'10px 18px',background:'#3b82f6',color:'#fff',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'15px'}}>
                   Generate New Quotation
                 </button>
-                <button onClick={saveQuotation} style={{display:'flex',alignItems:'center',gap:'8px',padding:'8px 16px',background:'#10b981',color:'#fff',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'14px'}}>
-                  <Save size={16} /> Save Quotation
+                <button onClick={saveQuotation} style={{display:'flex',alignItems:'center',gap:'8px',padding:'10px 18px',background:'#10b981',color:'#fff',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'15px'}}>
+                  <Save size={18} /> Save Quotation
                 </button>
-                <button onClick={() => setShowSavedQuotations(!showSavedQuotations)} style={{display:'flex',alignItems:'center',gap:'8px',padding:'8px 16px',background:'#f59e0b',color:'#fff',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'14px'}}>
-                  <FolderOpen size={16} /> Saved ({savedQuotations.length})
+                <button onClick={() => setShowSavedQuotations(!showSavedQuotations)} style={{display:'flex',alignItems:'center',gap:'8px',padding:'10px 18px',background:'#f59e0b',color:'#fff',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'15px'}}>
+                  <FolderOpen size={18} /> Saved ({savedQuotations.length})
                 </button>
-                <button onClick={markAsRevised} style={{padding:'8px 16px',background:'#ef4444',color:'#fff',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'14px'}}>
+                <button onClick={markAsRevised} style={{padding:'10px 18px',background:'#ef4444',color:'#fff',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'15px'}}>
                   Mark as Revised
                 </button>
               </div>
             </div>
-            <div style={{display:'flex',gap:'8px'}}>
-              <button onClick={downloadPDF} style={{display:'flex',alignItems:'center',gap:'8px',padding:'8px 16px',background:'#10b981',color:'#fff',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'14px'}}>
-                <Download size={16} /> Download PDF
-              </button>
-              <button onClick={handlePrint} style={{display:'flex',alignItems:'center',gap:'8px',padding:'8px 16px',background:'#8b5cf6',color:'#fff',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'14px'}}>
-                <Printer size={16} /> Print
+            <div style={{display:'flex',gap:'8px',flexDirection:'column',alignItems:'flex-end'}}>
+              {/* Calendar Selection */}
+              <div style={{position:'relative'}}>
+                <button 
+                  onClick={() => setShowDatePicker(!showDatePicker)}
+                  style={{display:'flex',alignItems:'center',gap:'8px',padding:'10px 18px',background:'#3b82f6',color:'#fff',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'15px'}}
+                >
+                  <Calendar size={18} /> Select Date
+                </button>
+                {showDatePicker && (
+                  <div ref={calendarRef} style={{position:'absolute',top:'100%',right:0,zIndex:40,marginTop:'8px'}}>
+                    <CalendarComponent onDateSelect={handleDateSelect} />
+                  </div>
+                )}
+              </div>
+              
+              {/* Amount and Currency Controls */}
+              <div style={{display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap'}}>
+                <div style={{display:'flex',alignItems:'center',gap:'8px',background:'#f8fafc',padding:'8px 12px',borderRadius:'6px',border:'1px solid #e2e8f0'}}>
+                  <span style={{fontSize:'14px',fontWeight:'500',color:'#374151'}}>Amount:</span>
+                  <input
+                    type="text"
+                    value={formData.amount}
+                    onChange={(e) => handleAmountChange(e.target.value)}
+                    placeholder="Enter amount"
+                    style={{
+                      width: '120px',
+                      padding: '6px 8px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '4px',
+                      fontSize: '14px',
+                      background: '#fff'
+                    }}
+                  />
+                </div>
+                
+                <div style={{display:'flex',alignItems:'center',gap:'8px',background:'#f8fafc',padding:'8px 12px',borderRadius:'6px',border:'1px solid #e2e8f0'}}>
+                  <span style={{fontSize:'14px',fontWeight:'500',color:'#374151'}}>Currency:</span>
+                  <select
+                    value={formData.displayCurrency}
+                    onChange={(e) => handleCurrencyChange(e.target.value)}
+                    style={{
+                      padding: '6px 8px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '4px',
+                      fontSize: '14px',
+                      background: '#fff',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {Object.keys(currencySymbols).map(currency => (
+                      <option key={currency} value={currency}>
+                        {currency} ({currencySymbols[currency]})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              
+              <button onClick={downloadPDF} style={{display:'flex',alignItems:'center',gap:'8px',padding:'10px 18px',background:'#10b981',color:'#fff',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'15px'}}>
+                <Download size={18} /> Download PDF
               </button>
             </div>
           </div>
 
-          {/* Saved Quotations Modal */}
           {showSavedQuotations && (
             <div style={{marginTop:'16px',maxHeight:'400px',overflowY:'auto',border:'1px solid #e5e7eb',borderRadius:'8px',padding:'16px',background:'#f9fafb'}}>
-              <h3 style={{fontSize:'16px',fontWeight:'bold',marginBottom:'12px',color:'#1f2937'}}>Saved Quotations</h3>
+              <h3 style={{fontSize:'18px',fontWeight:'bold',marginBottom:'12px',color:'#1f2937'}}>Saved Quotations</h3>
               {savedQuotations.length === 0 ? (
-                <p style={{color:'#6b7280',fontSize:'14px'}}>No saved quotations yet.</p>
+                <p style={{color:'#6b7280',fontSize:'15px'}}>No saved quotations yet.</p>
               ) : (
                 <div style={{display:'flex',flexDirection:'column',gap:'8px'}}>
                   {savedQuotations.map((quot) => (
                     <div key={quot.id} style={{background:'#fff',padding:'12px',borderRadius:'6px',border:'1px solid #e5e7eb',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                       <div style={{flex:1}}>
-                        <div style={{fontWeight:'600',color:'#1f2937',fontSize:'14px'}}>
+                        <div style={{fontWeight:'600',color:'#1f2937',fontSize:'15px'}}>
                           {quot.quotationInfo.number}
                           {quot.formData.isRevised && (
                             <span style={{marginLeft:'8px',padding:'2px 8px',background:'#fed7aa',color:'#c2410c',borderRadius:'4px',fontSize:'12px'}}>
@@ -590,18 +931,18 @@ const QuotationForm = () => {
                             </span>
                           )}
                         </div>
-                        <div style={{fontSize:'12px',color:'#6b7280',marginTop:'4px'}}>
+                        <div style={{fontSize:'13px',color:'#6b7280',marginTop:'4px'}}>
                           Client: {quot.formData.clientName || 'N/A'} | Amount: {quot.formData.amount || 'N/A'}
                         </div>
-                        <div style={{fontSize:'11px',color:'#9ca3af',marginTop:'2px'}}>
+                        <div style={{fontSize:'12px',color:'#9ca3af',marginTop:'2px'}}>
                           Saved: {new Date(quot.savedAt).toLocaleString()}
                         </div>
                       </div>
                       <div style={{display:'flex',gap:'8px'}}>
-                        <button onClick={() => loadQuotation(quot)} style={{padding:'6px 12px',background:'#3b82f6',color:'#fff',border:'none',borderRadius:'4px',cursor:'pointer',fontSize:'12px'}}>
+                        <button onClick={() => loadQuotation(quot)} style={{padding:'6px 12px',background:'#3b82f6',color:'#fff',border:'none',borderRadius:'4px',cursor:'pointer',fontSize:'13px'}}>
                           Load
                         </button>
-                        <button onClick={() => deleteQuotation(quot.id)} style={{padding:'6px 12px',background:'#ef4444',color:'#fff',border:'none',borderRadius:'4px',cursor:'pointer',fontSize:'12px'}}>
+                        <button onClick={() => deleteQuotation(quot.id)} style={{padding:'6px 12px',background:'#ef4444',color:'#fff',border:'none',borderRadius:'4px',cursor:'pointer',fontSize:'13px'}}>
                           Delete
                         </button>
                       </div>
@@ -616,391 +957,556 @@ const QuotationForm = () => {
 
       {/* Quotation Form */}
       <div style={{display:'flex',justifyContent:'center'}}>
-        <div id="quotation-form" style={{background:'#fff',boxShadow:'0 10px 15px rgba(0,0,0,0.1)',borderRadius:'8px',overflow:'hidden',maxWidth:'1024px',width:'100%',minHeight:'297mm'}} className="quotation-content">
+        <div id="quotation-form" style={{
+          background:'#fff',
+          boxShadow:'0 4px 6px rgba(0,0,0,0.1)',
+          width:'210mm',
+          minHeight:'297mm',
+          margin:'0 auto'
+        }} className="quotation-content">
           
-          {/* Text Editor Modal */}
-          {showTextEditor.id && (
-            <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:50,padding:'16px'}} className="no-print">
-              <div style={{background:'#fff',borderRadius:'8px',padding:'24px',width:'100%',maxWidth:'500px',maxHeight:'90vh',overflow:'auto'}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'16px'}}>
-                  <h3 style={{fontSize:'18px',fontWeight:'bold',margin:0}}>Text Editor</h3>
-                  <button onClick={closeTextEditor} style={{background:'none',border:'none',cursor:'pointer',color:'#6b7280'}}>
-                    <X size={20} />
-                  </button>
-                </div>
-                <div style={{display:'flex',flexWrap:'wrap',gap:'8px',marginBottom:'16px',padding:'8px',border:'1px solid #d1d5db',borderRadius:'4px'}}>
-                  <button onClick={() => toggleTextStyle('bold')} style={{padding:'8px',border:'none',borderRadius:'4px',cursor:'pointer',background:'transparent'}} title="Bold"><Bold size={16} /></button>
-                  <button onClick={() => toggleTextStyle('italic')} style={{padding:'8px',border:'none',borderRadius:'4px',cursor:'pointer',background:'transparent'}} title="Italic"><Italic size={16} /></button>
-                  <button onClick={() => toggleTextStyle('underline')} style={{padding:'8px',border:'none',borderRadius:'4px',cursor:'pointer',background:'transparent'}} title="Underline"><Underline size={16} /></button>
-                  <button onClick={() => changeFontSize(true)} style={{padding:'8px',border:'none',borderRadius:'4px',cursor:'pointer',background:'transparent'}} title="Increase"><Type size={16} />+</button>
-                  <button onClick={() => changeFontSize(false)} style={{padding:'8px',border:'none',borderRadius:'4px',cursor:'pointer',background:'transparent'}} title="Decrease"><Type size={12} />-</button>
-                  <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
-                    <Palette size={16} />
-                    <input type="color" onChange={(e) => changeTextColor(e.target.value)} style={{width:'32px',height:'32px',cursor:'pointer'}} />
-                  </div>
-                </div>
-                <div ref={textEditorRef} contentEditable style={{width:'100%',height:'160px',border:'1px solid #d1d5db',borderRadius:'4px',padding:'8px',overflow:'auto'}} />
-                <div style={{display:'flex',justifyContent:'flex-end',gap:'8px',marginTop:'16px'}}>
-                  <button onClick={closeTextEditor} style={{padding:'8px 16px',background:'#3b82f6',color:'#fff',border:'none',borderRadius:'4px',cursor:'pointer'}}>
-                    Apply Changes
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+          {showTextEditor.id && <CustomTextEditor />}
 
-          {/* Header */}
-          <div style={{padding:'24px',borderBottom:'2px solid #1f2937'}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'start',flexWrap:'wrap',gap:'16px'}}>
-              <div style={{fontSize:'14px',color:'#000'}}>
-                <div style={{fontWeight:'600',marginBottom:'4px'}}>#246, Devaji vip Plaza, VIP Road</div>
-                <div style={{fontWeight:'600',marginBottom:'4px'}}>Zirakpur, Punjab Pin : 140603</div>
-                <div style={{fontWeight:'600'}}>90414-99964/73</div>
-              </div>
-              <div style={{textAlign:'center',position:'relative'}}>
-                <div style={{fontSize:'14px',color:'#000',marginBottom:'4px'}}>No. {quotationInfo.number}</div>
-                <div style={{fontSize:'14px',color:'#000'}}>Dated: {quotationInfo.date}</div>
-                <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:'8px',marginTop:'8px'}} className="no-print">
-                  <button onClick={() => setShowDatePicker(!showDatePicker)} style={{padding:'8px',background:'transparent',border:'none',color:'#3b82f6',cursor:'pointer'}}>
-                    <Calendar size={18} />
-                  </button>
-                </div>
-                {showDatePicker && (
-                  <div ref={calendarRef} style={{position:'absolute',zIndex:40,top:'100%',left:'50%',transform:'translateX(-50%)',marginTop:'8px'}} className="no-print">
-                    <CalendarComponent onDateSelect={handleDateSelect} />
-                  </div>
-                )}
-              </div>
-              <div style={{textAlign:'right'}}>
-                <div style={{display:'flex',alignItems:'center',justifyContent:'flex-end',marginBottom:'8px'}}>
-                  <img src={bidLogo} alt="BID Logo" style={{height:'64px',marginRight:'8px',objectFit:'contain'}} />
+          {/* PAGE 1 - MAIN QUOTATION */}
+          <div className="page page-1" style={{
+            width:'210mm',
+            minHeight:'297mm',
+            background:'#fff',
+            padding:'0',
+            pageBreakAfter:'always',
+            fontFamily:'Arial, sans-serif',
+            position: 'relative'
+          }}>
+            
+            {/* Header */}
+            <div style={{
+              display:'grid',
+              gridTemplateColumns:'1fr 1fr 1fr',
+              padding:'15mm 15mm 8mm 15mm',
+              borderBottom:'2px solid #000',
+              gap:'15mm',
+              alignItems:'start'
+            }}>
+              <div style={{fontSize:'11pt',lineHeight:'1.4',fontWeight:'600'}}>
+                <div style={{display:'flex',alignItems:'start',gap:'4px',marginBottom:'2px'}}>
+                  <MapPin size={14} style={{marginTop:'2px',flexShrink:0}} />
                   <div>
-                    <div style={{fontSize:'20px',fontWeight:'bold',color:'#000',lineHeight:'1.2'}}>Building<br />India Digital</div>
+                    <div>#246, Devaji vip Plaza, VIP Road</div>
+                    <div style={{marginLeft:'18px'}}>Zirakpur, Punjab Pin : 140603</div>
+                  </div>
+                </div>
+                <div style={{display:'flex',alignItems:'center',gap:'4px',marginTop:'4px'}}>
+                  <Phone size={14} />
+                  <div>+91 90414-99964/73</div>
+                </div>
+              </div>
+
+              <div style={{textAlign:'center',fontSize:'11pt',fontWeight:'bold'}}>
+                <div style={{marginBottom:'4px'}}>No. {quotationInfo.number}</div>
+                <div>Dated: {quotationInfo.date}</div>
+              </div>
+
+              <div style={{textAlign:'right'}}>
+                <div style={{display:'inline-flex',alignItems:'center',justifyContent:'flex-end',gap:'8px'}}>
+                  <img src={bidLogo} alt="BID Logo" style={{height:'30mm',objectFit:'contain'}} />
+                  <div style={{fontSize:'16pt',fontWeight:'bold',lineHeight:'1.1',textAlign:'right'}}>
+                    <div>BUILDING</div>
+                    <div>INDIA</div>
+                    <div>DIGITAL</div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          {/* Client Info */}
-          <div style={{padding:'24px',borderBottom:'1px solid #1f2937'}}>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'24px'}}>
+            {/* Client Info */}
+            <div style={{
+              display:'grid',
+              gridTemplateColumns:'1fr 1fr',
+              padding:'6mm 15mm 4mm 15mm',
+              borderBottom:'1px solid #000',
+              gap:'20mm'
+            }}>
               <div>
-                <div style={{marginBottom:'16px'}}>
-                  <div style={{fontWeight:'bold',fontSize:'14px',color:'#000',marginBottom:'4px'}}>Client Name</div>
-                  <input type="text" value={formData.clientName} onChange={(e) => handleFormChange('clientName', e.target.value)} placeholder="Enter client name" style={{width:'100%',padding:'8px 0',fontSize:'14px',border:'none',borderBottom:'1px solid #e5e7eb',outline:'none',color:'#000',background:'transparent'}} />
+                <div style={{marginBottom:'4mm'}}>
+                  <div style={{fontSize:'11pt',fontWeight:'bold',marginBottom:'2mm'}}>Client Name</div>
+                  <div style={{
+                    width:'100%',
+                    padding:'2mm',
+                    fontSize:'11pt',
+                    border:'1px solid #000',
+                    minHeight:'6mm',
+                    background:'#fff'
+                  }}>
+                    {formData.clientName || 'Enter client name'}
+                  </div>
                 </div>
-                <div style={{marginBottom:'16px'}}>
-                  <div style={{fontWeight:'bold',fontSize:'14px',color:'#000',marginBottom:'4px'}}>Contact Person</div>
-                  <input type="text" value={formData.contactPerson} onChange={(e) => handleFormChange('contactPerson', e.target.value)} placeholder="Enter contact person" style={{width:'100%',padding:'8px 0',fontSize:'14px',border:'none',borderBottom:'1px solid #e5e7eb',outline:'none',color:'#000',background:'transparent'}} />
+                <div style={{marginBottom:'4mm'}}>
+                  <div style={{fontSize:'11pt',fontWeight:'bold',marginBottom:'2mm'}}>Contact Person</div>
+                  <div style={{
+                    width:'100%',
+                    padding:'2mm',
+                    fontSize:'11pt',
+                    border:'1px solid #000',
+                    minHeight:'6mm',
+                    background:'#fff'
+                  }}>
+                    {formData.contactPerson || 'Enter contact person'}
+                  </div>
                 </div>
               </div>
+
               <div>
-                <div style={{marginBottom:'16px'}}>
-                  <div style={{fontWeight:'bold',fontSize:'14px',color:'#000',marginBottom:'4px'}}>Address</div>
-                  <textarea value={formData.address} onChange={(e) => handleFormChange('address', e.target.value)} placeholder="Enter client address" rows="3" style={{width:'100%',padding:'8px 0',fontSize:'14px',border:'none',borderBottom:'1px solid #e5e7eb',outline:'none',resize:'none',color:'#000',background:'transparent'}} />
+                <div style={{marginBottom:'4mm'}}>
+                  <div style={{fontSize:'11pt',fontWeight:'bold',marginBottom:'2mm'}}>Address</div>
+                  <div style={{
+                    width:'100%',
+                    padding:'2mm',
+                    fontSize:'11pt',
+                    border:'1px solid #000',
+                    minHeight:'12mm',
+                    background:'#fff'
+                  }}>
+                    {formData.address || 'Enter client address'}
+                  </div>
                 </div>
                 <div>
-                  <div style={{fontWeight:'bold',fontSize:'14px',color:'#000',marginBottom:'4px'}}>Phone/Mobile</div>
-                  <input type="text" value={formData.phone} onChange={(e) => handleFormChange('phone', e.target.value)} placeholder="Enter phone number" style={{width:'100%',padding:'8px 0',fontSize:'14px',border:'none',borderBottom:'1px solid #e5e7eb',outline:'none',color:'#000',background:'transparent'}} />
+                  <div style={{fontSize:'11pt',fontWeight:'bold',marginBottom:'2mm'}}>Phone/Mobile</div>
+                  <div style={{
+                    width:'100%',
+                    padding:'2mm',
+                    fontSize:'11pt',
+                    border:'1px solid #000',
+                    minHeight:'6mm',
+                    background:'#fff'
+                  }}>
+                    {formData.phone || 'Enter phone number'}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          {/* Subscription Details */}
-          <div style={{padding:'24px',borderBottom:'1px solid #1f2937'}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'16px',flexWrap:'wrap',gap:'12px'}}>
-              <h3 style={{fontSize:'18px',fontWeight:'bold',color:'#000',margin:0}}>SUBSCRIPTION DETAILS</h3>
-              <div style={{display:'flex',gap:'8px'}} className="no-print">
-                <button onClick={addSubscriptionItem} style={{display:'flex',alignItems:'center',gap:'4px',padding:'8px 12px',background:'#10b981',color:'#fff',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'14px'}}>
-                  <Plus size={16} /> Add Item
-                </button>
-                <button onClick={toggleEditMode} style={{display:'flex',alignItems:'center',gap:'4px',padding:'8px 12px',background:isEditing?'#3b82f6':'#6b7280',color:'#fff',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'14px'}}>
-                  <Edit3 size={16} /> {isEditing ? 'Editing' : 'Edit'}
-                </button>
+            {/* Subscription Table */}
+            <div style={{padding:'4mm 15mm 4mm 15mm',borderBottom:'1px solid #000',flex:1}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'3mm'}}>
+                <h3 style={{fontSize:'12pt',fontWeight:'bold',margin:0}}>SUBSCRIPTION DETAILS</h3>
+                <div style={{display:'flex',gap:'2mm'}} className="no-print">
+                  <button onClick={addSubscriptionItem} style={{
+                    display:'flex',alignItems:'center',gap:'1mm',padding:'1mm 2mm',background:'#10b981',color:'#fff',border:'none',borderRadius:'2mm',cursor:'pointer',fontSize:'9pt'
+                  }}>
+                    <Plus size={12} /> Add Item
+                  </button>
+                  <button onClick={toggleEditMode} style={{
+                    display:'flex',alignItems:'center',gap:'1mm',padding:'1mm 2mm',background:isEditing?'#3b82f6':'#6b7280',color:'#fff',border:'none',borderRadius:'2mm',cursor:'pointer',fontSize:'9pt'
+                  }}>
+                    <Edit3 size={12} /> {isEditing ? 'Editing' : 'Edit'}
+                  </button>
+                </div>
               </div>
-            </div>
-            <div style={{overflowX:'auto'}}>
-              <table style={{width:'100%',borderCollapse:'collapse',border:'1px solid #1f2937'}}>
+              
+              <table style={{width:'100%',borderCollapse:'collapse',border:'1px solid #000',fontSize:'10pt'}}>
                 <thead>
-                  <tr style={{background:'#e5e7eb'}}>
-                    <th style={{border:'1px solid #1f2937',padding:'12px',textAlign:'left',color:'#000',fontWeight:'bold',fontSize:'14px',width:'25%'}}>S. No.</th>
-                    <th style={{border:'1px solid #1f2937',padding:'12px',textAlign:'left',color:'#000',fontWeight:'bold',fontSize:'14px'}}>SUBSCRIPTION</th>
-                    {isEditing && <th style={{border:'1px solid #1f2937',padding:'12px',textAlign:'left',color:'#000',fontWeight:'bold',fontSize:'14px',width:'100px'}} className="no-print">Actions</th>}
+                  <tr style={{background:'#f0f0f0'}}>
+                    <th style={{border:'1px solid #000',padding:'2mm',textAlign:'center',fontWeight:'bold',fontSize:'11pt',width:'20%'}}>S. No.</th>
+                    <th style={{border:'1px solid #000',padding:'2mm',textAlign:'center',fontWeight:'bold',fontSize:'11pt'}}>SUBSCRIPTION</th>
+                    <th style={{border:'1px solid #000',padding:'2mm',textAlign:'center',fontWeight:'bold',fontSize:'11pt',width:'15mm'}} className="no-print">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {subscriptionItems.map((item) => (
                     <tr key={item.id}>
-                      <td style={{border:'1px solid #1f2937',padding:'12px',verticalAlign:'top',background:'#fff'}}>
+                      <td style={{border:'1px solid #000',padding:'2mm',verticalAlign:'top',background:'#fff'}}>
                         <div
-                          onClick={() => isEditing && openTextEditor(item.id, 'serialNumber', item.serialNumber)}
+                          onClick={() => isEditing && openTextEditor(item.id, 'serialNumber')}
                           style={{
-                            minHeight:'80px',
-                            padding:'8px',
+                            minHeight:'12mm',
+                            padding:'1mm',
                             cursor:isEditing?'pointer':'default',
                             border:isEditing?'1px dashed #60a5fa':'none',
                             background:isEditing?'#eff6ff':'transparent',
-                            color:item.serialNumber?'#000':'#9ca3af',
-                            fontStyle:!item.serialNumber?'italic':'normal',
-                            fontSize:'14px'
+                            fontSize:'10pt',
+                            whiteSpace:'pre-wrap'
                           }}
                         >
-                          {item.serialNumber ? <div dangerouslySetInnerHTML={{ __html: item.serialNumber }} /> : (isEditing && 'Click to add text...')}
+                          {item.serialNumber || (isEditing && 'Click to add text...')}
                         </div>
                       </td>
-                      <td style={{border:'1px solid #1f2937',padding:'12px',verticalAlign:'top',background:'#fff'}}>
+                      <td style={{border:'1px solid #000',padding:'2mm',verticalAlign:'top',background:'#fff'}}>
                         <div
-                          onClick={() => isEditing && openTextEditor(item.id, 'subscription', item.subscription)}
+                          onClick={() => isEditing && openTextEditor(item.id, 'subscription')}
                           style={{
-                            minHeight:'80px',
-                            padding:'8px',
+                            minHeight:'12mm',
+                            padding:'1mm',
                             cursor:isEditing?'pointer':'default',
                             border:isEditing?'1px dashed #60a5fa':'none',
                             background:isEditing?'#eff6ff':'transparent',
-                            color:item.subscription?'#000':'#9ca3af',
-                            fontStyle:!item.subscription?'italic':'normal',
-                            fontSize:'14px'
+                            fontSize:'10pt',
+                            whiteSpace:'pre-wrap'
                           }}
                         >
-                          {item.subscription ? <div dangerouslySetInnerHTML={{ __html: item.subscription }} /> : (isEditing && 'Click to add text...')}
+                          {item.subscription || (isEditing && 'Click to add text...')}
                         </div>
                       </td>
-                      {isEditing && (
-                        <td style={{border:'1px solid #1f2937',padding:'12px',textAlign:'center',verticalAlign:'top',background:'#fff'}} className="no-print">
-                          <button onClick={() => removeSubscriptionItem(item.id)} style={{padding:'6px',background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:'4px',cursor:'pointer'}} title="Delete">
-                            <Trash2 size={16} />
-                          </button>
-                        </td>
-                      )}
+                      <td style={{border:'1px solid #000',padding:'2mm',textAlign:'center',verticalAlign:'middle',background:'#fff'}} className="no-print">
+                        <button 
+                          onClick={() => removeSubscriptionItem(item.id)} 
+                          disabled={subscriptionItems.length === 1} 
+                          style={{
+                            padding:'1mm 2mm',
+                            background:subscriptionItems.length === 1 ? '#e5e7eb' : '#fee2e2',
+                            color:subscriptionItems.length === 1 ? '#9ca3af' : '#dc2626',
+                            border:'none',
+                            borderRadius:'1mm',
+                            cursor:subscriptionItems.length === 1 ? 'not-allowed' : 'pointer',
+                            display:'flex',
+                            alignItems:'center',
+                            justifyContent:'center',
+                            gap:'0.5mm',
+                            margin:'0 auto',
+                            fontSize:'8pt'
+                          }} 
+                        >
+                          <Trash2 size={10} />
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          </div>
 
-          {/* Amount Section */}
-          <div style={{padding:'12px 24px',borderBottom:'1px solid #1f2937'}}>
-            <h3 style={{fontSize:'16px',fontWeight:'bold',color:'#000',marginBottom:'6px',margin:0}}>AMOUNT</h3>
-            
-            <div style={{display:'flex',gap:'12px',alignItems:'stretch',marginTop:'6px',flexWrap:'wrap'}}>
-              <select 
-                value={formData.displayCurrency} 
-                onChange={(e) => handleCurrencyChange(e.target.value)}
-                style={{padding:'6px 12px',fontSize:'18px',fontWeight:'bold',color:'#000',border:'1px solid #d1d5db',borderRadius:'6px',background:'#fff',cursor:'pointer',minWidth:'120px'}}
-              >
-                {Object.keys(currencySymbols).map(code => (
-                  <option key={code} value={code}>
-                    {code} ({currencySymbols[code]})
-                  </option>
-                ))}
-              </select>
+            {/* Amount Section */}
+            <div style={{padding:'4mm 15mm 4mm 15mm',borderBottom:'1px solid #000'}}>
+              <h3 style={{fontSize:'12pt',fontWeight:'bold',marginBottom:'2mm',margin:0}}>AMOUNT</h3>
               
-              <input 
-                type="text" 
-                value={formData.amount} 
-                onChange={(e) => handleAmountChange(e.target.value)} 
-                placeholder="Enter amount" 
-                style={{flex:1,padding:'6px 12px',fontSize:'22px',fontWeight:'bold',color:'#000',border:'1px solid #d1d5db',borderRadius:'6px',minWidth:'200px'}} 
-              />
+              <div style={{display:'flex',gap:'3mm',alignItems:'center',marginTop:'2mm',flexWrap:'wrap'}}>
+                <div style={{
+                  padding:'1mm 2mm',
+                  fontSize:'11pt',
+                  fontWeight:'bold',
+                  border:'1px solid #000',
+                  borderRadius:'1mm',
+                  background:'#fff',
+                  minWidth:'25mm'
+                }}>
+                  {formData.displayCurrency} ({currencySymbols[formData.displayCurrency]})
+                </div>
+                
+                <div style={{
+                  flex:1,
+                  padding:'1mm 2mm',
+                  fontSize:'11pt',
+                  fontWeight:'bold',
+                  border:'1px solid #000',
+                  borderRadius:'1mm',
+                  minWidth:'30mm',
+                  background:'#fff'
+                }}>
+                  {formData.amount || 'Enter amount'}
+                </div>
+              </div>
+              
+              <div style={{marginTop:'2mm',fontSize:'11pt'}}>
+                <span style={{fontWeight:'600',fontSize:'11pt'}}>
+                  {currencySymbols[formData.displayCurrency]} {formData.amount || '0'}
+                </span>
+                <span style={{marginLeft:'3mm',fontWeight:'500',fontSize:'10pt'}}>
+                  (GST EXTRA)
+                </span>
+              </div>
             </div>
-            
-            <div style={{marginTop:'6px',fontSize:'13px',color:'#000'}}>
-              <span style={{fontWeight:'600',fontSize:'16px'}}>
-                {currencySymbols[formData.displayCurrency]} {formData.amount || '0'}
-              </span>
-              <span style={{marginLeft:'8px',fontWeight:'500'}}>(GST EXTRA)</span>
-            </div>
-          </div>
 
-          {/* Payment Details */}
-          <div style={{padding:'12px 24px',borderBottom:'1px solid #1f2937',pageBreakAfter:'avoid'}}>
-            <h3 style={{fontSize:'16px',fontWeight:'bold',color:'#000',marginBottom:'6px',margin:'0 0 6px 0'}}>PAYMENT DETAILS</h3>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px'}}>
-              <div>
-                <div style={{fontWeight:'bold',fontSize:'13px',color:'#000',marginBottom:'1px'}}>Bank Name</div>
-                <div style={{fontSize:'13px',color:'#000',padding:'4px 0'}}>{formData.bankName}</div>
-              </div>
-              <div>
-                <div style={{fontWeight:'bold',fontSize:'13px',color:'#000',marginBottom:'1px'}}>Account Number</div>
-                <div style={{fontSize:'13px',color:'#000',padding:'4px 0'}}>{formData.accountNumber}</div>
-              </div>
-              <div>
-                <div style={{fontWeight:'bold',fontSize:'13px',color:'#000',marginBottom:'1px'}}>Account Name</div>
-                <div style={{fontSize:'13px',color:'#000',padding:'4px 0'}}>{formData.accountName}</div>
-              </div>
-              <div>
-                <div style={{fontWeight:'bold',fontSize:'13px',color:'#000',marginBottom:'1px'}}>IFSC Code</div>
-                <div style={{fontSize:'13px',color:'#000',padding:'4px 0'}}>{formData.ifscCode}</div>
+            {/* Payment Details */}
+            <div style={{padding:'4mm 15mm 4mm 15mm',borderBottom:'1px solid #000'}}>
+              <h3 style={{fontSize:'12pt',fontWeight:'bold',marginBottom:'2mm',margin:'0 0 2mm 0'}}>PAYMENT DETAILS</h3>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'2mm',fontSize:'10pt'}}>
+                <div>
+                  <div style={{fontWeight:'bold',marginBottom:'1mm'}}>Bank Name</div>
+                  <div>{formData.bankName}</div>
+                </div>
+                <div>
+                  <div style={{fontWeight:'bold',marginBottom:'1mm'}}>Account Number</div>
+                  <div>{formData.accountNumber}</div>
+                </div>
+                <div>
+                  <div style={{fontWeight:'bold',marginBottom:'1mm'}}>Account Name</div>
+                  <div>{formData.accountName}</div>
+                </div>
+                <div>
+                  <div style={{fontWeight:'bold',marginBottom:'1mm'}}>IFSC Code</div>
+                  <div>{formData.ifscCode}</div>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Additional Information */}
-          <div style={{padding:'8px 24px',borderBottom:'1px solid #1f2937',background:'#fff',pageBreakAfter:'avoid',pageBreakInside:'avoid'}}>
-            <div style={{fontSize:'9px',color:'#000',lineHeight:'1.3'}}>
-              <p style={{textAlign:'center',fontWeight:'bold',margin:'0 0 4px 0',fontSize:'10px'}}>
+            {/* Terms Section */}
+            <div style={{
+              padding:'3mm 15mm 3mm 15mm',
+              borderBottom:'1px solid #000',
+              background:'#fff',
+              fontSize:'8pt',
+              lineHeight:'1.2'
+            }}>
+              <p style={{textAlign:'center',fontWeight:'bold',margin:'0 0 1mm 0',fontSize:'9pt'}}>
                 This is an application for Promotional services to BUILDING INDIA DIGITAL.
               </p>
-              <div style={{display:'flex',flexDirection:'column',gap:'1px'}}>
-                <p style={{margin:'0',padding:'0'}}>• All information including text & picture to be provide by the client who should also be the legal copyright owner for the same.</p>
-                <p style={{margin:'0',padding:'0'}}>• BUILDING INDIA DIGITAL shall not be liable for any claims/damages arising out of content Posted on your charges.</p>
-                <p style={{margin:'0',padding:'0'}}>• Work on service shall commence only after clearances of cheques/pay order.</p>
-                <p style={{margin:'0',padding:'0'}}>• We are not responsible for any changes in future if business navigation page already made by client and they don't have any access to the page and own/claim this business option is not there.</p>
-                <p style={{margin:'0',padding:'0'}}>• BUILDING INDIA DIGITAL will take 60 days to complete the services/work written in the application.</p>
-                <p style={{margin:'0',padding:'0'}}>• After the work starts there will be No Claim & No Refund.</p>
-                <p style={{margin:'0',padding:'0'}}>• Payment to us is covered under 'Advertising Contract' u/s 194C. TDS, if applicable, will be @2%.</p>
-                <p style={{margin:'0',padding:'0'}}>• Pursuant to the signing of this performa invoice, I hereby allow BUILDING INDIA DIGITAL to make, commercial calls to my mobile number(s) and organization contact number(s).</p>
-                <p style={{margin:'0',padding:'0'}}>• This declaration will hold valid even if choose to get my numbers registered for NONC at any future date.</p>
+              <div style={{display:'flex',flexDirection:'column',gap:'0.5mm'}}>
+                <p style={{margin:'0',padding:'0',fontSize:'8pt'}}>• All information including text & picture to be provide by the client who should also be the legal copyright owner for the same.</p>
+                <p style={{margin:'0',padding:'0',fontSize:'8pt'}}>• BUILDING INDIA DIGITAL shall not be liable for any claims/damages arising out of content Posted on your charges.</p>
+                <p style={{margin:'0',padding:'0',fontSize:'8pt'}}>• Work on service shall commence only after clearances of cheques/pay order.</p>
+                <p style={{margin:'0',padding:'0',fontSize:'8pt'}}>• We are not responsible for any changes in future if business navigation page already made by client and they don't have any access to the page and own/claim this business option is not there.</p>
+                <p style={{margin:'0',padding:'0',fontSize:'8pt'}}>• BUILDING INDIA DIGITAL will take 60 days to complete the services/work written in the application.</p>
+                <p style={{margin:'0',padding:'0',fontSize:'8pt'}}>• After the work starts there will be No Claim & No Refund.</p>
+                <p style={{margin:'0',padding:'0',fontSize:'8pt'}}>• Payment to us is covered under 'Advertising Contract' u/s 194C. TDS, if applicable, will be @2%.</p>
+                <p style={{margin:'0',padding:'0',fontSize:'8pt'}}>• Pursuant to the signing of this performa invoice, I hereby allow BUILDING INDIA DIGITAL to make, commercial calls to my mobile number(s) and organization contact number(s).</p>
+                <p style={{margin:'0',padding:'0',fontSize:'8pt'}}>• This declaration will hold valid even if choose to get my numbers registered for NONC at any future date.</p>
               </div>
             </div>
-          </div>
 
-          {/* Signatures */}
-          <div style={{padding:'24px',borderBottom:'1px solid #1f2937'}}>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(250px, 1fr))',gap:'24px'}}>
-              <div style={{textAlign:'center'}}>
-                <h3 style={{fontSize:'16px',fontWeight:'bold',color:'#000',marginBottom:'12px'}}>CLIENT SIGNATURE</h3>
-                <div style={{border:'2px solid #1f2937',padding:'16px',height:'120px',display:'flex',alignItems:'center',justifyContent:'center',background:'#fff'}}>
-                  <div style={{textAlign:'center',color:'#000'}}>
-                    <div style={{fontSize:'24px',marginBottom:'8px'}}>✎</div>
-                    <div style={{fontSize:'14px'}}>Signature Space</div>
-                    <div style={{fontSize:'12px',marginTop:'4px'}}>(Client will sign here)</div>
+            {/* Signatures - NO BORDERS */}
+            <div style={{padding:'4mm 15mm 4mm 15mm'}}>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8mm'}}>
+                <div style={{textAlign:'center'}}>
+                  <h3 style={{fontSize:'11pt',fontWeight:'bold',marginBottom:'2mm'}}>CLIENT SIGNATURE</h3>
+                  <div style={{
+                    padding:'2mm',
+                    height:'20mm',
+                    display:'flex',
+                    alignItems:'center',
+                    justifyContent:'center',
+                    background:'#fff'
+                  }}>
+                    <div style={{textAlign:'center',fontSize:'9pt'}}>
+                      <div>Signature Space</div>
+                      <div style={{marginTop:'0.5mm'}}>(Client will sign here)</div>
+                    </div>
+                  </div>
+                </div>
+                <div style={{textAlign:'center'}}>
+                  <h3 style={{fontSize:'11pt',fontWeight:'bold',marginBottom:'2mm'}}>ORGANISATION SIGNATURE</h3>
+                  <div style={{
+                    padding:'0',
+                    height:'20mm',
+                    display:'flex',
+                    alignItems:'center',
+                    justifyContent:'center',
+                    background:'#fff',
+                    overflow:'hidden'
+                  }}>
+                    <img 
+                      src={signatureImage} 
+                      alt="Organisation Signature" 
+                      style={{
+                        width:'100%',
+                        height:'300%',
+                        objectFit:'contain',
+                        opacity:'1'
+                      }}
+                    />
                   </div>
                 </div>
               </div>
-              <div style={{textAlign:'center'}}>
-                <h3 style={{fontSize:'16px',fontWeight:'bold',color:'#000',marginBottom:'12px'}}>ORGANISATION SIGNATURE</h3>
-                <div style={{border:'2px solid #1f2937',padding:'0',height:'120px',display:'flex',alignItems:'center',justifyContent:'center',background:'#fff',overflow:'hidden'}}>
-                  <img 
-                    src={signatureImage} 
-                    alt="Organisation Signature" 
-                    style={{width:'100%',height:'100%',objectFit:'contain',opacity:'1',transform:'scale(2.2)'}}
-                  />
-                </div>
-              </div>
             </div>
           </div>
 
-          {/* Terms & Conditions */}
-          <div style={{padding:'24px',background:'#fff'}} className="terms-section">
-            <h3 style={{fontSize:'16px',fontWeight:'bold',color:'#000',marginBottom:'12px'}}>TERMS & CONDITIONS OF SERVICES</h3>
-            <div style={{fontSize:'10px',color:'#000',lineHeight:'1.4'}}>
-              <div style={{marginBottom:'8px'}}>
-                <h4 style={{fontWeight:'bold',color:'#000',marginBottom:'2px',fontSize:'11px'}}>1. GENERAL</h4>
-                <p style={{margin:'0 0 2px 0'}}>1.1 The terms & conditions contained herein shall constitute and form an entire Agreement between BUILDING INDIA DIGITAL and the Customer.</p>
-                <p style={{margin:'0'}}>1.2 Any clause of the Terms and conditions if deemed invalid, void or for any reason becomes unenforceable, shall be deemed severable and shall not affect the validity and enforce ability of the remaining clauses of the conditions of this agreement.</p>
-              </div>
+          {/* PAGE 2 - TERMS & CONDITIONS */}
+          <div className="page page-2" style={{
+            width:'210mm',
+            minHeight:'297mm',
+            background:'#fff',
+            padding:'15mm 15mm 15mm 15mm',
+            fontSize:'9pt',
+            lineHeight:'1.3',
+            pageBreakBefore:'always'
+          }}>
+            <h3 style={{
+              fontSize:'14pt',
+              fontWeight:'bold',
+              marginBottom:'4mm',
+              textAlign:'center',
+              borderBottom:'2px solid #000',
+              paddingBottom:'2mm'
+            }}>TERMS & CONDITIONS OF SERVICES</h3>
+            
+            <div style={{marginBottom:'3mm'}}>
+              <h4 style={{fontWeight:'bold',marginBottom:'1mm',fontSize:'10pt'}}>1. GENERAL</h4>
+              <p style={{margin:'0 0 1mm 0',fontSize:'9pt'}}>1.1 The terms & conditions contained herein shall constitute and form an entire Agreement (hereinafter referred to as Agreement between BUILDING INDIA DIGITAL and the Customer.</p>
+              <p style={{margin:'0',fontSize:'9pt'}}>1.2. Any clause of the Terms and conditions if deemed invalid, void or for any reason becomes unenforceable, shall be deemed severable and shall not affect the validity and enforce ability of the remaining clauses of the conditions of this agreement.</p>
+            </div>
 
-              <div style={{marginBottom:'8px'}}>
-                <h4 style={{fontWeight:'bold',color:'#000',marginBottom:'2px',fontSize:'11px'}}>2. TERM</h4>
-                <p style={{margin:'0 0 2px 0'}}>2.1 The term of this agreement shall be for a period of 12 months from the date of execution of this agreement.</p>
-                <p style={{margin:'0'}}>2.2 This agreement shall be automatically renewed for successive terms of 12 months each unless either party gives written notice of termination at least 30 days prior to the end of the then current term.</p>
-              </div>
+            <div style={{marginBottom:'3mm'}}>
+              <h4 style={{fontWeight:'bold',marginBottom:'1mm',fontSize:'10pt'}}>2. SERVICES.EXCLUSIONS & PERFORMANCE</h4>
+              <p style={{margin:'0 0 1mm 0',fontSize:'9pt'}}>2.1 In the event the advertisement requirements requested by the Customer fell within the restricted category of face book & you tube or are not supported by face book & you tube are one against the policy of face book & youtube.</p>
+              <p style={{margin:'0',fontSize:'9pt'}}>2.2. BUILDING INDIA DIGITAL reserves the right to refuse or cancel any advertising requirement at its sole discretion, with or without cause, at any time, Balanced advertising budget will not be refunded to the Customer.</p>
+            </div>
 
-              <div style={{marginBottom:'8px'}}>
-                <h4 style={{fontWeight:'bold',color:'#000',marginBottom:'2px',fontSize:'11px'}}>3. PAYMENT TERMS</h4>
-                <p style={{margin:'0 0 2px 0'}}>3.1 The Customer agrees to pay BUILDING INDIA DIGITAL the fees as specified in the subscription details.</p>
-                <p style={{margin:'0 0 2px 0'}}>3.2 All payments shall be made in advance unless otherwise agreed in writing.</p>
-                <p style={{margin:'0'}}>3.3 Late payments shall attract interest at the rate of 1.5% per month.</p>
-              </div>
+            <div style={{marginBottom:'3mm'}}>
+              <h4 style={{fontWeight:'bold',marginBottom:'1mm',fontSize:'10pt'}}>3. CONSIDERATION</h4>
+              <p style={{margin:'0 0 1mm 0',fontSize:'9pt'}}>3.1 The considerations means the cost of the package, purchased by the Customer from BUILDING INDIA DIGITAL.</p>
+              <p style={{margin:'0 0 1mm 0',fontSize:'9pt'}}>3.2 BUILDING INDIA DIGITAL reserves the right to charge for any additional work executed by BUILDING INDIA DIGITAL:</p>
+              <p style={{margin:'0',fontSize:'9pt'}}>3.3 In the vent the Customer agree to pay the consideration for the services via ECS mode, than the same cannot be cancelled by the Customer amidst the terms of the agreement, unless the Agreement is earlier terminated by BUILDING INDIA DIGITAL at its sole discretion or by mutual consent of BUILDING INDIA DIGITAL and the customer.</p>
+            </div>
 
-              <div style={{marginBottom:'8px'}}>
-                <h4 style={{fontWeight:'bold',color:'#000',marginBottom:'2px',fontSize:'11px'}}>4. INTELLECTUAL PROPERTY</h4>
-                <p style={{margin:'0 0 2px 0'}}>4.1 All intellectual property rights in the services provided shall remain the property of BUILDING INDIA DIGITAL.</p>
-                <p style={{margin:'0'}}>4.2 The Customer shall not reproduce, distribute, or create derivative works based on the services without prior written consent.</p>
-              </div>
+            <div style={{marginBottom:'3mm'}}>
+              <h4 style={{fontWeight:'bold',marginBottom:'1mm',fontSize:'10pt'}}>4. INDEMNITY</h4>
+              <p style={{margin:'0',fontSize:'9pt'}}>4.1 Customer shall indemnify and hold BUILDING INDIA DIGITAL harmless from all claims, costs, proceedings, damages and expenses (including legal professional fees and expenses), awarded against or paid by BUILDING INDIA DIGITAL as a result of or in connection with any alleged or actual infringement of any third party's. Intellectual property right (including copyright) or other rights arising out of the use or supply of the information by soon behalf of the Customer to BUILDING INDIA DIGITAL.</p>
+            </div>
 
-              <div style={{marginBottom:'8px'}}>
-                <h4 style={{fontWeight:'bold',color:'#000',marginBottom:'2px',fontSize:'11px'}}>5. CONFIDENTIALITY</h4>
-                <p style={{margin:'0 0 2px 0'}}>5.1 Both parties agree to maintain the confidentiality of any proprietary information received from the other party.</p>
-                <p style={{margin:'0'}}>5.2 This obligation shall survive the termination of this agreement.</p>
-              </div>
+            <div style={{marginBottom:'3mm'}}>
+              <h4 style={{fontWeight:'bold',marginBottom:'1mm',fontSize:'10pt'}}>5. TERMINATION</h4>
+              <p style={{margin:'0',fontSize:'9pt'}}>5.1 If the contract is terminated by the customer before services under this Agreement are to begin executions or are in the process of completion that in such an event, under no circumstances, of the consideration paid or agreed to be the Customer, shall not be refundable and the same shall not be forfeited in full.</p>
+            </div>
 
-              <div style={{marginBottom:'8px'}}>
-                <h4 style={{fontWeight:'bold',color:'#000',marginBottom:'2px',fontSize:'11px'}}>6. LIMITATION OF LIABILITY</h4>
-                <p style={{margin:'0 0 2px 0'}}>6.1 BUILDING INDIA DIGITAL's total liability under this agreement shall not exceed the total fees paid by the Customer.</p>
-                <p style={{margin:'0'}}>6.2 In no event shall BUILDING INDIA DIGITAL be liable for any indirect, special, or consequential damages.</p>
-              </div>
+            <div style={{marginBottom:'3mm'}}>
+              <h4 style={{fontWeight:'bold',marginBottom:'1mm',fontSize:'10pt'}}>6. MISCELIANEOUS</h4>
+              <p style={{margin:'0 0 1mm 0',fontSize:'9pt'}}>6.1 BUILDING INDIA DIGITAL shall be permitted to identify customer, as BUILDING INDIA DIGITAL client and may use customer's name in connection with BUILDING INDIA DIGITAL marketing invitative.</p>
+              <p style={{margin:'0',fontSize:'9pt'}}>6.2 Customer agrees and permits BUILDING INDIA DIGITAL to make calls and messages on his mobile and office contact numbers subsequent to the signing of this agreement.</p>
+            </div>
 
-              <div style={{marginBottom:'8px'}}>
-                <h4 style={{fontWeight:'bold',color:'#000',marginBottom:'2px',fontSize:'11px'}}>7. TERMINATION</h4>
-                <p style={{margin:'0 0 2px 0'}}>7.1 Either party may terminate this agreement for material breach by the other party upon 30 days written notice.</p>
-                <p style={{margin:'0'}}>7.2 Upon termination, all fees due to BUILDING INDIA DIGITAL shall become immediately payable.</p>
-              </div>
+            <div style={{marginBottom:'3mm'}}>
+              <h4 style={{fontWeight:'bold',marginBottom:'1mm',fontSize:'10pt'}}>7. DISCLAIMER</h4>
+              <p style={{margin:'0 0 1mm 0',fontSize:'9pt'}}>7.1 BUILDING INDIA DIGITAL makes no representation, warranties or guarantees of any kind as to the level of sales, purchase, click, sales leads or other performance that customer can expect from advertising campaign through BUILDING INDIA DIGITAL any estimated provided by BUILDING INDIA DIGITAL to the customer are not intended to create any binding obligation or to be relied upon by the customer and the same are mere estimates.</p>
+              <p style={{margin:'0 0 1mm 0',fontSize:'9pt'}}>7.2 BUILDING INDIA DIGITAL will not be liable for any loss of profit, loss of contract, loss of use, or any direct and/or indirect and/or any consequential loss damage and expensesustained incurred by the customer as a result of any acts or omission or information or advise given in any form by or on behalf of BUILDING INDIA DIGITAL to the customer and the customer is advised to make its own inquiries and use its own judgement and/or intellect before taking any decision regarding the same.</p>
+              <p style={{margin:'0 0 1mm 0',fontSize:'9pt'}}>7.3 In addition to the above it is further agreed that the customer shall be solely liable for any loss or damage, withtermonetary or other suffered by it as a result of any change effected by it on its own in the website by using CMS and BUILDING INDIA DIGITAL shall not be held liable any account whatsoever.</p>
+              <p style={{margin:'0',fontSize:'9pt'}}>7.4 Customer would be provided access to reporting interface by BUILDING INDIA DIGITAL showcasing all the critical performance parametershowever BUILDING INDIA DIGITAL accept no liability based on performance.</p>
+            </div>
 
-              <div style={{marginBottom:'8px'}}>
-                <h4 style={{fontWeight:'bold',color:'#000',marginBottom:'2px',fontSize:'11px'}}>8. GOVERNING LAW</h4>
-                <p style={{margin:'0 0 2px 0'}}>8.1 This agreement shall be governed by and construed in accordance with the laws of India.</p>
-                <p style={{margin:'0'}}>8.2 Any disputes arising out of this agreement shall be subject to the exclusive jurisdiction of the courts in Zirakpur, Punjab.</p>
-              </div>
+            <div style={{marginBottom:'3mm'}}>
+              <h4 style={{fontWeight:'bold',marginBottom:'1mm',fontSize:'10pt'}}>8. FORCE MAJEURE</h4>
+              <p style={{margin:'0',fontSize:'9pt'}}>8.1 Neither party will be liable to the other, for any delay or failure to fulfill obligations set for till in this agreement caused by force major reasons or circumstances beyond their control.</p>
+            </div>
 
-              <div style={{marginBottom:'8px'}}>
-                <h4 style={{fontWeight:'bold',color:'#000',marginBottom:'2px',fontSize:'11px'}}>9. FORCE MAJEURE</h4>
-                <p style={{margin:'0'}}>9.1 Neither party shall be liable for any failure or delay in performance due to circumstances beyond its reasonable control.</p>
-              </div>
+            <div style={{marginBottom:'3mm'}}>
+              <h4 style={{fontWeight:'bold',marginBottom:'1mm',fontSize:'10pt'}}>9. COMMUNICATION</h4>
+              <p style={{margin:'0 0 1mm 0',fontSize:'9pt'}}>9.1 Any notice send by the customer with respect to this agreement has be in writing and has to be sent registered post at the following address. F-140, 4th Floor, Phase-8B, Mohali, Punjab.</p>
+              <p style={{margin:'0',fontSize:'9pt'}}>9.2 In case of any query the Customer can contact the Manager of BUILDING INDIA DIGITAL between 10Am to 6 PM between Monday to Friday on the phone number given on the face of the present invoice.</p>
+            </div>
 
-              <div style={{marginBottom:'12px'}}>
-                <h4 style={{fontWeight:'bold',color:'#000',marginBottom:'2px',fontSize:'11px'}}>10. ENTIRE AGREEMENT</h4>
-                <p style={{margin:'0'}}>10.1 This agreement constitutes the entire understanding between the parties and supersedes all prior agreements, understandings, and representations.</p>
-              </div>
+            <div style={{marginBottom:'3mm'}}>
+              <h4 style={{fontWeight:'bold',marginBottom:'1mm',fontSize:'10pt'}}>10. GOVERNING LAWAND JURISDICTION</h4>
+              <p style={{margin:'0 0 1mm 0',fontSize:'9pt'}}>10.1 The agreement, its validity, construction, interpretation, effect, performance and termination shall be governed by the laws (both substantive and procedural) as applicable in India From time to time.</p>
+              <p style={{margin:'0',fontSize:'9pt'}}>10.2 Any dispute or difference arising out of or in connection with this agreement including its interpretation there of between BUILDING INDIA DIGITAL customer shall be subject to the exclusive jurisdiction to the courts of Mohali (Punjab) only.</p>
+            </div>
 
-              <div style={{textAlign:'center',fontWeight:'bold',marginTop:'16px',paddingTop:'12px',borderTop:'1px solid #1f2937'}}>
-                <p style={{margin:'0'}}>ABOVE PACKAGE IS FOR 1 ID ONLY</p>
-              </div>
+            <div style={{textAlign:'center',fontWeight:'bold',marginTop:'4mm',paddingTop:'2mm',borderTop:'2px solid #000',fontSize:'10pt'}}>
+              <p style={{margin:'0'}}>11. ABOVE PACKAGE IS FOR 1 ID ONLY</p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Print Styles */}
+      {/* Styles */}
       <style>{`
         @media print {
-          @page { 
-            margin: 0; 
-            size: A4; 
+          @page {
+            size: A4;
+            margin: 0;
           }
-          .no-print { 
-            display: none !important; 
+          
+          body, html {
+            width: 210mm;
+            height: 297mm;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: white !important;
+            font-family: Arial, sans-serif;
           }
-          .print-container { 
-            background: #fff !important; 
-            padding: 0 !important; 
+          
+          .no-print {
+            display: none !important;
           }
-          .quotation-content { 
-            box-shadow: none !important; 
-            border-radius: 0 !important; 
+          
+          .print-container {
+            background: white !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            width: 210mm !important;
+            min-height: 297mm !important;
           }
-          body { 
-            margin: 0 !important; 
-            padding: 0 !important; 
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
+          
+          .quotation-content {
+            box-shadow: none !important;
+            border-radius: 0 !important;
+            max-width: 100% !important;
+            width: 100% !important;
+            margin: 0 auto !important;
+            padding: 0 !important;
           }
-          input, textarea, select {
-            border: none !important;
-            background: transparent !important;
-            color: #000 !important;
-            -webkit-appearance: none !important;
-            -moz-appearance: none !important;
-            appearance: none !important;
+          
+          .page {
+            width: 210mm;
+            min-height: 297mm !important;
+            height: auto !important;
+            page-break-inside: avoid;
+            break-inside: avoid;
           }
-          .terms-section { 
-            page-break-before: always !important; 
-            page-break-inside: avoid !important; 
+          
+          .page-1 {
+            page-break-after: always !important;
           }
+          
+          .page-2 {
+            page-break-before: always !important;
+          }
+          
           * {
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
             color-adjust: exact !important;
           }
-        }
-        @media (max-width: 768px) {
-          #quotation-form { 
-            font-size: 12px; 
+          
+          table {
+            border-collapse: collapse;
+            width: 100%;
           }
+          
+          th, td {
+            border: 1px solid #000 !important;
+          }
+          
+          body {
+            font-size: 12px !important;
+            line-height: 1.4 !important;
+            color: #000 !important;
+          }
+        }
+        
+        @media screen {
+          .quotation-content {
+            font-size: 14px;
+            margin: 0 auto;
+          }
+          
+          .page {
+            background: white;
+            margin-bottom: 20px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+          }
+        }
+        
+        @media (max-width: 768px) {
+          .quotation-content {
+            transform: scale(0.95);
+            transform-origin: top center;
+          }
+        }
+        
+        * {
+          box-sizing: border-box;
+        }
+        
+        body {
+          font-family: Arial, sans-serif;
+          line-height: 1.4;
+          color: #000;
+        }
+        
+        table {
+          border-collapse: collapse;
+          width: 100%;
+        }
+        
+        th, td {
+          word-wrap: break-word;
         }
       `}</style>
     </div>
