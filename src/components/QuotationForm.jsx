@@ -1,5 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Download, Edit3, Plus, Trash2, Calendar, X, Save, FolderOpen, MapPin, Phone, Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, Type, Copy, Scissors, AlignJustify, List, ListOrdered, ArrowUp, ArrowDown } from 'lucide-react';
+import { Download, Edit3, Plus, Trash2, Calendar, X, Save, FolderOpen, MapPin, Phone } from 'lucide-react';
+
+// Import Quill dependencies
+import ReactQuill from 'react-quill';
+import 'react-quill/dist/quill.snow.css';
 
 import bidLogo from '../assets/images/bid2.png';
 import signatureImage from '../assets/images/signature1.png';
@@ -9,22 +13,12 @@ const QuotationForm = () => {
     { id: 1, serialNumber: '', subscription: '' }
   ]);
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [isEditing, setIsEditing] = useState(true);
-  const [showTextEditor, setShowTextEditor] = useState({ id: null, field: null });
+  const [isEditing, setIsEditing] = useState(false);
+  const [showTextEditor, setShowTextEditor] = useState({ id: null, field: null, content: '' });
   const [exchangeRates, setExchangeRates] = useState({});
   const [savedQuotations, setSavedQuotations] = useState([]);
   const [showSavedQuotations, setShowSavedQuotations] = useState(false);
   const [currentQuotationId, setCurrentQuotationId] = useState(null);
-  
-  const [editorState, setEditorState] = useState({
-    content: '',
-    fontSize: '16px',
-    fontFamily: 'Arial, sans-serif',
-    textAlign: 'left',
-    isBold: false,
-    isItalic: false,
-    isUnderline: false
-  });
   
   const [formData, setFormData] = useState({
     clientName: '',
@@ -48,8 +42,8 @@ const QuotationForm = () => {
     referenceNumber: 0
   });
 
-  const editorRef = useRef(null);
   const calendarRef = useRef(null);
+  const quillRef = useRef(null);
 
   const currencySymbols = {
     'INR': '₹',
@@ -62,21 +56,24 @@ const QuotationForm = () => {
     'AUD': 'A$'
   };
 
-  const fontFamilies = [
-    { name: 'Arial', value: 'Arial, sans-serif' },
-    { name: 'Times New Roman', value: 'Times New Roman, serif' },
-    { name: 'Georgia', value: 'Georgia, serif' },
-    { name: 'Verdana', value: 'Verdana, sans-serif' },
-    { name: 'Courier New', value: 'Courier New, monospace' },
-    { name: 'Tahoma', value: 'Tahoma, sans-serif' }
-  ];
+  // Quill modules configuration
+  const quillModules = {
+    toolbar: {
+      container: [
+        [{ 'header': [2, 3, false] }],
+        ['bold', 'italic', 'underline'],
+        [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+        [{ 'align': [] }],
+        ['clean']
+      ]
+    }
+  };
 
-  const fontSizes = [
-    { name: 'Small', value: '14px' },
-    { name: 'Normal', value: '16px' },
-    { name: 'Large', value: '18px' },
-    { name: 'X-Large', value: '20px' },
-    { name: 'XX-Large', value: '24px' }
+  const quillFormats = [
+    'header',
+    'bold', 'italic', 'underline',
+    'list', 'bullet',
+    'align'
   ];
 
   useEffect(() => {
@@ -318,6 +315,7 @@ const QuotationForm = () => {
     });
     setSubscriptionItems([{ id: 1, serialNumber: '', subscription: '' }]);
     setCurrentQuotationId(null);
+    setIsEditing(false);
   };
 
   const handleDateSelect = (date) => {
@@ -325,103 +323,38 @@ const QuotationForm = () => {
     setShowDatePicker(false);
   };
 
-  const toggleEditMode = () => setIsEditing(!isEditing);
+  const toggleEditMode = () => {
+    setIsEditing(!isEditing);
+    if (isEditing) {
+      setShowTextEditor({ id: null, field: null, content: '' });
+    }
+  };
 
   const openTextEditor = (id, field) => {
     if (!isEditing) return;
     
     const item = subscriptionItems.find(i => i.id === id);
     if (item) {
-      setEditorState({
-        content: item[field] || '',
-        fontSize: '16px',
-        fontFamily: 'Arial, sans-serif',
-        textAlign: 'left',
-        isBold: false,
-        isItalic: false,
-        isUnderline: false
+      setShowTextEditor({ 
+        id, 
+        field, 
+        content: item[field] || '' 
       });
-      setShowTextEditor({ id, field });
     }
   };
 
   const closeTextEditor = () => {
-    if (showTextEditor.id) {
-      updateSubscriptionItem(showTextEditor.id, showTextEditor.field, editorState.content);
+    if (showTextEditor.id && showTextEditor.content !== undefined) {
+      updateSubscriptionItem(showTextEditor.id, showTextEditor.field, showTextEditor.content);
     }
-    setShowTextEditor({ id: null, field: null });
+    setShowTextEditor({ id: null, field: null, content: '' });
   };
 
-  const updateEditorContent = (newContent) => {
-    setEditorState(prev => ({ ...prev, content: newContent }));
-  };
-
-  const updateEditorStyle = (field, value) => {
-    setEditorState(prev => ({ ...prev, [field]: value }));
-  };
-
-  const toggleTextStyle = (style) => {
-    setEditorState(prev => ({ ...prev, [style]: !prev[style] }));
-  };
-
-  // FIXED: Working text movement functions
-  const moveTextUp = () => {
-    const lines = editorState.content.split('\n');
-    if (lines.length > 1) {
-      const newLines = [...lines];
-      for (let i = 1; i < newLines.length; i++) {
-        [newLines[i-1], newLines[i]] = [newLines[i], newLines[i-1]];
-      }
-      updateEditorContent(newLines.join('\n'));
-    }
-  };
-
-  const moveTextDown = () => {
-    const lines = editorState.content.split('\n');
-    if (lines.length > 1) {
-      const newLines = [...lines];
-      for (let i = newLines.length - 2; i >= 0; i--) {
-        [newLines[i], newLines[i+1]] = [newLines[i+1], newLines[i]];
-      }
-      updateEditorContent(newLines.join('\n'));
-    }
-  };
-
-  const addBulletList = () => {
-    const currentText = editorState.content;
-    const lines = currentText.split('\n').filter(line => line.trim() !== '');
-    const bulletList = lines.map(line => `• ${line}`).join('\n');
-    updateEditorContent(bulletList);
-  };
-
-  const addNumberedList = () => {
-    const currentText = editorState.content;
-    const lines = currentText.split('\n').filter(line => line.trim() !== '');
-    const numberedList = lines.map((line, idx) => `${idx + 1}. ${line}`).join('\n');
-    updateEditorContent(numberedList);
-  };
-
-  const handleCopy = () => {
-    if (editorRef.current) {
-      editorRef.current.select();
-      document.execCommand('copy');
-    }
-  };
-
-  const handlePaste = async () => {
-    try {
-      const text = await navigator.clipboard.readText();
-      updateEditorContent(editorState.content + text);
-    } catch (err) {
-      console.error('Failed to paste:', err);
-    }
-  };
-
-  const handleCut = () => {
-    if (editorRef.current) {
-      editorRef.current.select();
-      document.execCommand('cut');
-    }
+  const handleEditorChange = (content) => {
+    setShowTextEditor(prev => ({
+      ...prev,
+      content: content
+    }));
   };
 
   const downloadPDF = async () => {
@@ -512,6 +445,57 @@ const QuotationForm = () => {
         setCurrentQuotationId(null);
       }
     }
+  };
+
+  const QuillEditor = () => {
+    return (
+      <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:50,padding:'16px'}} className="no-print">
+        <div style={{background:'#fff',borderRadius:'8px',padding:'24px',width:'100%',maxWidth:'900px',maxHeight:'90vh',overflow:'auto'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'16px'}}>
+            <h3 style={{fontSize:'20px',fontWeight:'bold',margin:0}}>Rich Text Editor</h3>
+            <button onClick={closeTextEditor} style={{background:'none',border:'none',cursor:'pointer',color:'#6b7280'}}>
+              <X size={24} />
+            </button>
+          </div>
+          
+          {/* Quill Editor */}
+          <div style={{
+            border: '2px solid #d1d5db',
+            borderRadius: '6px',
+            minHeight: '300px',
+            background: '#fff'
+          }}>
+            <ReactQuill
+              ref={quillRef}
+              value={showTextEditor.content}
+              onChange={handleEditorChange}
+              modules={quillModules}
+              formats={quillFormats}
+              theme="snow"
+              style={{
+                height: '300px',
+                border: 'none'
+              }}
+            />
+          </div>
+
+          <div style={{display:'flex',justifyContent:'flex-end',gap:'12px',marginTop:'20px'}}>
+            <button 
+              onClick={closeTextEditor} 
+              style={{padding:'10px 20px',background:'#6b7280',color:'#fff',border:'none',borderRadius:'6px',cursor:'pointer',fontWeight:'500',fontSize:'14px'}}
+            >
+              Cancel
+            </button>
+            <button 
+              onClick={closeTextEditor} 
+              style={{padding:'10px 20px',background:'#3b82f6',color:'#fff',border:'none',borderRadius:'6px',cursor:'pointer',fontWeight:'500',fontSize:'14px'}}
+            >
+              Apply Changes
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   const CalendarComponent = ({ onDateSelect }) => {
@@ -605,226 +589,6 @@ const QuotationForm = () => {
     );
   };
 
-  const CustomTextEditor = () => {
-    return (
-      <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:50,padding:'16px'}} className="no-print">
-        <div style={{background:'#fff',borderRadius:'8px',padding:'24px',width:'100%',maxWidth:'900px',maxHeight:'90vh',overflow:'auto'}}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'16px'}}>
-            <h3 style={{fontSize:'20px',fontWeight:'bold',margin:0}}>Rich Text Editor</h3>
-            <button onClick={closeTextEditor} style={{background:'none',border:'none',cursor:'pointer',color:'#6b7280'}}>
-              <X size={24} />
-            </button>
-          </div>
-          
-          {/* Toolbar */}
-          <div style={{display:'flex',flexWrap:'wrap',gap:'8px',marginBottom:'16px',padding:'12px',background:'#f8f9fa',borderRadius:'6px',border:'1px solid #e9ecef'}}>
-            {/* Font Family */}
-            <select 
-              value={editorState.fontFamily}
-              onChange={(e) => updateEditorStyle('fontFamily', e.target.value)}
-              style={{padding:'6px 12px',border:'1px solid #d1d5db',borderRadius:'4px',background:'#fff',cursor:'pointer'}}
-            >
-              {fontFamilies.map(font => (
-                <option key={font.value} value={font.value}>{font.name}</option>
-              ))}
-            </select>
-
-            {/* Font Size */}
-            <select 
-              value={editorState.fontSize}
-              onChange={(e) => updateEditorStyle('fontSize', e.target.value)}
-              style={{padding:'6px 12px',border:'1px solid #d1d5db',borderRadius:'4px',background:'#fff',cursor:'pointer'}}
-            >
-              {fontSizes.map(size => (
-                <option key={size.value} value={size.value}>{size.name}</option>
-              ))}
-            </select>
-
-            {/* Text Alignment */}
-            <div style={{display:'flex',gap:'2px',background:'#fff',border:'1px solid #d1d5db',borderRadius:'4px',overflow:'hidden'}}>
-              <button 
-                onClick={() => updateEditorStyle('textAlign', 'left')}
-                style={{padding:'6px 10px',border:'none',background:editorState.textAlign === 'left' ? '#3b82f6' : '#fff',color:editorState.textAlign === 'left' ? '#fff' : '#374151',cursor:'pointer'}}
-                title="Align Left"
-              >
-                <AlignLeft size={16} />
-              </button>
-              <button 
-                onClick={() => updateEditorStyle('textAlign', 'center')}
-                style={{padding:'6px 10px',border:'none',background:editorState.textAlign === 'center' ? '#3b82f6' : '#fff',color:editorState.textAlign === 'center' ? '#fff' : '#374151',cursor:'pointer'}}
-                title="Align Center"
-              >
-                <AlignCenter size={16} />
-              </button>
-              <button 
-                onClick={() => updateEditorStyle('textAlign', 'right')}
-                style={{padding:'6px 10px',border:'none',background:editorState.textAlign === 'right' ? '#3b82f6' : '#fff',color:editorState.textAlign === 'right' ? '#fff' : '#374151',cursor:'pointer'}}
-                title="Align Right"
-              >
-                <AlignRight size={16} />
-              </button>
-              <button 
-                onClick={() => updateEditorStyle('textAlign', 'justify')}
-                style={{padding:'6px 10px',border:'none',background:editorState.textAlign === 'justify' ? '#3b82f6' : '#fff',color:editorState.textAlign === 'justify' ? '#fff' : '#374151',cursor:'pointer'}}
-                title="Justify"
-              >
-                <AlignJustify size={16} />
-              </button>
-            </div>
-
-            {/* Text Styles */}
-            <div style={{display:'flex',gap:'2px',background:'#fff',border:'1px solid #d1d5db',borderRadius:'4px',overflow:'hidden'}}>
-              <button 
-                onClick={() => toggleTextStyle('isBold')}
-                style={{padding:'6px 10px',border:'none',background:editorState.isBold ? '#3b82f6' : '#fff',color:editorState.isBold ? '#fff' : '#374151',cursor:'pointer'}}
-                title="Bold"
-              >
-                <Bold size={16} />
-              </button>
-              <button 
-                onClick={() => toggleTextStyle('isItalic')}
-                style={{padding:'6px 10px',border:'none',background:editorState.isItalic ? '#3b82f6' : '#fff',color:editorState.isItalic ? '#fff' : '#374151',cursor:'pointer'}}
-                title="Italic"
-              >
-                <Italic size={16} />
-              </button>
-              <button 
-                onClick={() => toggleTextStyle('isUnderline')}
-                style={{padding:'6px 10px',border:'none',background:editorState.isUnderline ? '#3b82f6' : '#fff',color:editorState.isUnderline ? '#fff' : '#374151',cursor:'pointer'}}
-                title="Underline"
-              >
-                <Underline size={16} />
-              </button>
-            </div>
-
-            {/* Lists */}
-            <div style={{display:'flex',gap:'2px',background:'#fff',border:'1px solid #d1d5db',borderRadius:'4px',overflow:'hidden'}}>
-              <button 
-                onClick={addBulletList}
-                style={{padding:'6px 10px',border:'none',background:'#fff',color:'#374151',cursor:'pointer'}}
-                title="Bullet List"
-              >
-                <List size={16} />
-              </button>
-              <button 
-                onClick={addNumberedList}
-                style={{padding:'6px 10px',border:'none',background:'#fff',color:'#374151',cursor:'pointer'}}
-                title="Numbered List"
-              >
-                <ListOrdered size={16} />
-              </button>
-            </div>
-
-            {/* Text Movement */}
-            <div style={{display:'flex',gap:'2px',background:'#fff',border:'1px solid #d1d5db',borderRadius:'4px',overflow:'hidden'}}>
-              <button 
-                onClick={moveTextUp}
-                style={{padding:'6px 10px',border:'none',background:'#fff',color:'#374151',cursor:'pointer'}}
-                title="Move Text Up"
-              >
-                <ArrowUp size={16} />
-              </button>
-              <button 
-                onClick={moveTextDown}
-                style={{padding:'6px 10px',border:'none',background:'#fff',color:'#374151',cursor:'pointer'}}
-                title="Move Text Down"
-              >
-                <ArrowDown size={16} />
-              </button>
-            </div>
-
-            {/* Copy/Paste/Cut */}
-            <div style={{display:'flex',gap:'2px',background:'#fff',border:'1px solid #d1d5db',borderRadius:'4px',overflow:'hidden'}}>
-              <button 
-                onClick={handleCopy}
-                style={{padding:'6px 10px',border:'none',background:'#fff',color:'#374151',cursor:'pointer'}}
-                title="Copy"
-              >
-                <Copy size={16} />
-              </button>
-              <button 
-                onClick={handlePaste}
-                style={{padding:'6px 10px',border:'none',background:'#fff',color:'#374151',cursor:'pointer'}}
-                title="Paste"
-              >
-                <Type size={16} />
-              </button>
-              <button 
-                onClick={handleCut}
-                style={{padding:'6px 10px',border:'none',background:'#fff',color:'#374151',cursor:'pointer'}}
-                title="Cut"
-              >
-                <Scissors size={16} />
-              </button>
-            </div>
-          </div>
-
-          <textarea
-            ref={editorRef}
-            value={editorState.content}
-            onChange={(e) => updateEditorContent(e.target.value)}
-            autoFocus
-            style={{
-              width: '100%',
-              minHeight: '300px',
-              padding: '16px',
-              border: '2px solid #d1d5db',
-              borderRadius: '6px',
-              fontSize: editorState.fontSize,
-              fontFamily: editorState.fontFamily,
-              textAlign: editorState.textAlign,
-              fontWeight: editorState.isBold ? 'bold' : 'normal',
-              fontStyle: editorState.isItalic ? 'italic' : 'normal',
-              textDecoration: editorState.isUnderline ? 'underline' : 'none',
-              resize: 'vertical',
-              lineHeight: '1.6',
-              outline: 'none'
-            }}
-            placeholder="Type your text here..."
-          />
-
-          {/* Preview */}
-          <div style={{marginTop:'16px'}}>
-            <h4 style={{fontSize:'16px',fontWeight:'bold',marginBottom:'8px'}}>Preview:</h4>
-            <div 
-              style={{
-                padding: '16px',
-                border: '1px solid #e5e7eb',
-                borderRadius: '6px',
-                background: '#f9fafb',
-                minHeight: '120px',
-                fontSize: editorState.fontSize,
-                fontFamily: editorState.fontFamily,
-                textAlign: editorState.textAlign,
-                fontWeight: editorState.isBold ? 'bold' : 'normal',
-                fontStyle: editorState.isItalic ? 'italic' : 'normal',
-                textDecoration: editorState.isUnderline ? 'underline' : 'none',
-                whiteSpace: 'pre-wrap'
-              }}
-            >
-              {editorState.content || 'Preview will appear here...'}
-            </div>
-          </div>
-          
-          <div style={{display:'flex',justifyContent:'flex-end',gap:'12px',marginTop:'20px'}}>
-            <button 
-              onClick={closeTextEditor} 
-              style={{padding:'10px 20px',background:'#6b7280',color:'#fff',border:'none',borderRadius:'6px',cursor:'pointer',fontWeight:'500',fontSize:'14px'}}
-            >
-              Cancel
-            </button>
-            <button 
-              onClick={closeTextEditor} 
-              style={{padding:'10px 20px',background:'#3b82f6',color:'#fff',border:'none',borderRadius:'6px',cursor:'pointer',fontWeight:'500',fontSize:'14px'}}
-            >
-              Apply Changes
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
   return (
     <div style={{minHeight:'100vh',background:'#f3f4f6',padding:'16px'}} className="print-container">
       {/* Control Panel */}
@@ -913,6 +677,36 @@ const QuotationForm = () => {
             </div>
           </div>
 
+          {/* Edit Mode Toggle */}
+          <div style={{display:'flex',justifyContent:'center',marginTop:'16px',padding:'12px',background:'#f8fafc',borderRadius:'6px',border:'1px solid #e2e8f0'}}>
+            <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
+              <span style={{fontSize:'16px',fontWeight:'600',color:'#374151'}}>Edit Mode:</span>
+              <button 
+                onClick={toggleEditMode}
+                style={{
+                  padding: '10px 20px',
+                  background: isEditing ? '#10b981' : '#6b7280',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '15px',
+                  fontWeight: '600',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  transition: 'all 0.3s ease'
+                }}
+              >
+                <Edit3 size={18} />
+                {isEditing ? 'Editing Enabled' : 'Editing Disabled'}
+              </button>
+              <span style={{fontSize:'14px',color:'#6b7280',fontStyle:'italic'}}>
+                {isEditing ? 'You can now click on table cells to edit content' : 'Turn on editing to modify table content'}
+              </span>
+            </div>
+          </div>
+
           {showSavedQuotations && (
             <div style={{marginTop:'16px',maxHeight:'400px',overflowY:'auto',border:'1px solid #e5e7eb',borderRadius:'8px',padding:'16px',background:'#f9fafb'}}>
               <h3 style={{fontSize:'18px',fontWeight:'bold',marginBottom:'12px',color:'#1f2937'}}>Saved Quotations</h3>
@@ -965,7 +759,7 @@ const QuotationForm = () => {
           margin:'0 auto'
         }} className="quotation-content">
           
-          {showTextEditor.id && <CustomTextEditor />}
+          {showTextEditor.id && <QuillEditor />}
 
           {/* PAGE 1 - MAIN QUOTATION */}
           <div className="page page-1" style={{
@@ -1033,7 +827,6 @@ const QuotationForm = () => {
                     width:'100%',
                     padding:'2mm',
                     fontSize:'11pt',
-                    border:'1px solid #000',
                     minHeight:'6mm',
                     background:'#fff'
                   }}>
@@ -1046,7 +839,6 @@ const QuotationForm = () => {
                     width:'100%',
                     padding:'2mm',
                     fontSize:'11pt',
-                    border:'1px solid #000',
                     minHeight:'6mm',
                     background:'#fff'
                   }}>
@@ -1062,7 +854,6 @@ const QuotationForm = () => {
                     width:'100%',
                     padding:'2mm',
                     fontSize:'11pt',
-                    border:'1px solid #000',
                     minHeight:'12mm',
                     background:'#fff'
                   }}>
@@ -1075,7 +866,6 @@ const QuotationForm = () => {
                     width:'100%',
                     padding:'2mm',
                     fontSize:'11pt',
-                    border:'1px solid #000',
                     minHeight:'6mm',
                     background:'#fff'
                   }}>
@@ -1095,18 +885,13 @@ const QuotationForm = () => {
                   }}>
                     <Plus size={12} /> Add Item
                   </button>
-                  <button onClick={toggleEditMode} style={{
-                    display:'flex',alignItems:'center',gap:'1mm',padding:'1mm 2mm',background:isEditing?'#3b82f6':'#6b7280',color:'#fff',border:'none',borderRadius:'2mm',cursor:'pointer',fontSize:'9pt'
-                  }}>
-                    <Edit3 size={12} /> {isEditing ? 'Editing' : 'Edit'}
-                  </button>
                 </div>
               </div>
               
               <table style={{width:'100%',borderCollapse:'collapse',border:'1px solid #000',fontSize:'10pt'}}>
                 <thead>
                   <tr style={{background:'#f0f0f0'}}>
-                    <th style={{border:'1px solid #000',padding:'2mm',textAlign:'center',fontWeight:'bold',fontSize:'11pt',width:'20%'}}>S. No.</th>
+                    <th style={{border:'1px solid #000',padding:'2mm',textAlign:'center',fontWeight:'bold',fontSize:'11pt',width:'25%'}}>S. No.</th>
                     <th style={{border:'1px solid #000',padding:'2mm',textAlign:'center',fontWeight:'bold',fontSize:'11pt'}}>SUBSCRIPTION</th>
                     <th style={{border:'1px solid #000',padding:'2mm',textAlign:'center',fontWeight:'bold',fontSize:'11pt',width:'15mm'}} className="no-print">Actions</th>
                   </tr>
@@ -1114,27 +899,27 @@ const QuotationForm = () => {
                 <tbody>
                   {subscriptionItems.map((item) => (
                     <tr key={item.id}>
-                      <td style={{border:'1px solid #000',padding:'2mm',verticalAlign:'top',background:'#fff'}}>
+                      <td style={{border:'1px solid #000',padding:'2mm',verticalAlign:'top',background:'#fff',width:'25%'}}>
                         <div
                           onClick={() => isEditing && openTextEditor(item.id, 'serialNumber')}
                           style={{
-                            minHeight:'12mm',
+                            minHeight:'15mm',
                             padding:'1mm',
                             cursor:isEditing?'pointer':'default',
                             border:isEditing?'1px dashed #60a5fa':'none',
                             background:isEditing?'#eff6ff':'transparent',
                             fontSize:'10pt',
-                            whiteSpace:'pre-wrap'
+                            whiteSpace:'pre-wrap',
+                            width: '100%'
                           }}
-                        >
-                          {item.serialNumber || (isEditing && 'Click to add text...')}
-                        </div>
+                          dangerouslySetInnerHTML={{ __html: item.serialNumber || (isEditing ? 'Click to add text...' : '') }}
+                        />
                       </td>
                       <td style={{border:'1px solid #000',padding:'2mm',verticalAlign:'top',background:'#fff'}}>
                         <div
                           onClick={() => isEditing && openTextEditor(item.id, 'subscription')}
                           style={{
-                            minHeight:'12mm',
+                            minHeight:'15mm',
                             padding:'1mm',
                             cursor:isEditing?'pointer':'default',
                             border:isEditing?'1px dashed #60a5fa':'none',
@@ -1142,9 +927,8 @@ const QuotationForm = () => {
                             fontSize:'10pt',
                             whiteSpace:'pre-wrap'
                           }}
-                        >
-                          {item.subscription || (isEditing && 'Click to add text...')}
-                        </div>
+                          dangerouslySetInnerHTML={{ __html: item.subscription || (isEditing ? 'Click to add text...' : '') }}
+                        />
                       </td>
                       <td style={{border:'1px solid #000',padding:'2mm',textAlign:'center',verticalAlign:'middle',background:'#fff'}} className="no-print">
                         <button 
@@ -1174,11 +958,11 @@ const QuotationForm = () => {
               </table>
             </div>
 
-            {/* Amount Section */}
+            {/* Amount Section - CENTERED */}
             <div style={{padding:'4mm 15mm 4mm 15mm',borderBottom:'1px solid #000'}}>
-              <h3 style={{fontSize:'12pt',fontWeight:'bold',marginBottom:'2mm',margin:0}}>AMOUNT</h3>
+              <h3 style={{fontSize:'12pt',fontWeight:'bold',marginBottom:'2mm',margin:0, textAlign:'center'}}>AMOUNT</h3>
               
-              <div style={{display:'flex',gap:'3mm',alignItems:'center',marginTop:'2mm',flexWrap:'wrap'}}>
+              <div style={{display:'flex',justifyContent:'center',gap:'3mm',alignItems:'center',marginTop:'2mm',flexWrap:'wrap'}}>
                 <div style={{
                   padding:'1mm 2mm',
                   fontSize:'11pt',
@@ -1186,26 +970,27 @@ const QuotationForm = () => {
                   border:'1px solid #000',
                   borderRadius:'1mm',
                   background:'#fff',
-                  minWidth:'25mm'
+                  minWidth:'25mm',
+                  textAlign:'center'
                 }}>
                   {formData.displayCurrency} ({currencySymbols[formData.displayCurrency]})
                 </div>
                 
                 <div style={{
-                  flex:1,
                   padding:'1mm 2mm',
                   fontSize:'11pt',
                   fontWeight:'bold',
                   border:'1px solid #000',
                   borderRadius:'1mm',
                   minWidth:'30mm',
-                  background:'#fff'
+                  background:'#fff',
+                  textAlign:'center'
                 }}>
                   {formData.amount || 'Enter amount'}
                 </div>
               </div>
               
-              <div style={{marginTop:'2mm',fontSize:'11pt'}}>
+              <div style={{marginTop:'2mm',fontSize:'11pt', textAlign:'center'}}>
                 <span style={{fontWeight:'600',fontSize:'11pt'}}>
                   {currencySymbols[formData.displayCurrency]} {formData.amount || '0'}
                 </span>
@@ -1262,7 +1047,7 @@ const QuotationForm = () => {
               </div>
             </div>
 
-            {/* Signatures - NO BORDERS */}
+            {/* Signatures */}
             <div style={{padding:'4mm 15mm 4mm 15mm'}}>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8mm'}}>
                 <div style={{textAlign:'center'}}>
@@ -1470,28 +1255,82 @@ const QuotationForm = () => {
           }
         }
         
-        @media screen {
+        /* Enhanced Media Responsiveness */
+        @media screen and (max-width: 768px) {
           .quotation-content {
-            font-size: 14px;
-            margin: 0 auto;
+            width: 100% !important;
+            transform: scale(0.85);
+            transform-origin: top center;
+            margin: -20px auto !important;
           }
           
           .page {
-            background: white;
-            margin-bottom: 20px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            margin-bottom: 10px !important;
+          }
+          
+          .no-print .control-panel {
+            padding: 10px !important;
+          }
+          
+          .no-print button {
+            padding: 8px 12px !important;
+            font-size: 12px !important;
+          }
+          
+          .no-print .control-buttons {
+            flex-direction: column !important;
+            gap: 8px !important;
           }
         }
         
-        @media (max-width: 768px) {
+        @media screen and (max-width: 1024px) and (min-width: 769px) {
           .quotation-content {
-            transform: scale(0.95);
+            width: 95% !important;
+            transform: scale(0.9);
             transform-origin: top center;
           }
         }
         
-        * {
-          box-sizing: border-box;
+        @media screen and (min-width: 1025px) {
+          .quotation-content {
+            width: 210mm !important;
+            transform: none;
+          }
+        }
+        
+        @media screen and (max-width: 480px) {
+          .quotation-content {
+            transform: scale(0.75);
+            transform-origin: top center;
+            margin: -40px auto !important;
+          }
+          
+          .no-print .control-panel {
+            padding: 8px !important;
+          }
+          
+          .no-print button {
+            padding: 6px 10px !important;
+            font-size: 11px !important;
+          }
+          
+          .no-print .edit-toggle {
+            flex-direction: column !important;
+            gap: 8px !important;
+            text-align: center !important;
+          }
+        }
+        
+        @media screen and (max-width: 1024px) {
+          .no-print .header-controls {
+            flex-direction: column !important;
+            gap: 12px !important;
+          }
+          
+          .no-print .amount-controls {
+            flex-wrap: wrap !important;
+            justify-content: center !important;
+          }
         }
         
         body {
@@ -1507,6 +1346,60 @@ const QuotationForm = () => {
         
         th, td {
           word-wrap: break-word;
+        }
+        
+        /* Enhanced table responsiveness */
+        @media screen and (max-width: 768px) {
+          table {
+            font-size: 9pt !important;
+          }
+          
+          th, td {
+            padding: 1mm !important;
+          }
+        }
+
+        /* Quill Editor Styles */
+        .ql-editor {
+          min-height: 200px;
+          font-size: 14px;
+          line-height: 1.6;
+        }
+        
+        .ql-toolbar {
+          border-top: 1px solid #ccc;
+          border-left: 1px solid #ccc;
+          border-right: 1px solid #ccc;
+          border-bottom: none;
+          border-radius: 6px 6px 0 0;
+        }
+        
+        .ql-container {
+          border-bottom: 1px solid #ccc;
+          border-left: 1px solid #ccc;
+          border-right: 1px solid #ccc;
+          border-top: none;
+          border-radius: 0 0 6px 6px;
+        }
+        
+        .ql-editor p {
+          margin-bottom: 12px;
+        }
+        
+        .ql-editor h2 {
+          font-size: 1.5em;
+          font-weight: bold;
+          margin: 16px 0 8px 0;
+        }
+        
+        .ql-editor h3 {
+          font-size: 1.25em;
+          font-weight: bold;
+          margin: 12px 0 6px 0;
+        }
+        
+        .ql-editor ul, .ql-editor ol {
+          padding-left: 20px;
         }
       `}</style>
     </div>
