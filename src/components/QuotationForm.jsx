@@ -1,9 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Download, Edit3, Plus, Trash2, Calendar, X, Save, FolderOpen, MapPin, Phone } from 'lucide-react';
-
-// Import Quill dependencies
-import ReactQuill from 'react-quill';
-import 'react-quill/dist/quill.snow.css';
+import { Editor } from '@tinymce/tinymce-react';
 
 import bidLogo from '../assets/images/bid2.png';
 import signatureImage from '../assets/images/signature1.png';
@@ -14,11 +11,15 @@ const QuotationForm = () => {
   ]);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [showTextEditor, setShowTextEditor] = useState({ id: null, field: null, content: '' });
+  const [showTextEditor, setShowTextEditor] = useState({ id: null, field: null });
   const [exchangeRates, setExchangeRates] = useState({});
   const [savedQuotations, setSavedQuotations] = useState([]);
   const [showSavedQuotations, setShowSavedQuotations] = useState(false);
   const [currentQuotationId, setCurrentQuotationId] = useState(null);
+  const [editorContent, setEditorContent] = useState('');
+  
+  const editorRef = useRef(null);
+  const calendarRef = useRef(null);
   
   const [formData, setFormData] = useState({
     clientName: '',
@@ -42,9 +43,6 @@ const QuotationForm = () => {
     referenceNumber: 0
   });
 
-  const calendarRef = useRef(null);
-  const quillRef = useRef(null);
-
   const currencySymbols = {
     'INR': '₹',
     'USD': '$',
@@ -55,39 +53,6 @@ const QuotationForm = () => {
     'CAD': 'C$',
     'AUD': 'A$'
   };
-
-  // Quill modules configuration
-  const quillModules = {
-    toolbar: {
-      container: [
-        [{ 'header': [2, 3, false] }],
-        ['bold', 'italic', 'underline'],
-        [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-        [{ 'align': [] }],
-        ['clean']
-      ]
-    }
-  };
-
-  const quillFormats = [
-    'header',
-    'bold', 'italic', 'underline',
-    'list', 'bullet',
-    'align'
-  ];
-
-  useEffect(() => {
-    const saved = localStorage.getItem('bid_quotations');
-    if (saved) {
-      setSavedQuotations(JSON.parse(saved));
-    }
-  }, []);
-
-  useEffect(() => {
-    if (savedQuotations.length > 0) {
-      localStorage.setItem('bid_quotations', JSON.stringify(savedQuotations));
-    }
-  }, [savedQuotations]);
 
   const fetchExchangeRates = async () => {
     try {
@@ -326,7 +291,7 @@ const QuotationForm = () => {
   const toggleEditMode = () => {
     setIsEditing(!isEditing);
     if (isEditing) {
-      setShowTextEditor({ id: null, field: null, content: '' });
+      setShowTextEditor({ id: null, field: null });
     }
   };
 
@@ -335,34 +300,23 @@ const QuotationForm = () => {
     
     const item = subscriptionItems.find(i => i.id === id);
     if (item) {
-      setShowTextEditor({ 
-        id, 
-        field, 
-        content: item[field] || '' 
-      });
+      setEditorContent(item[field] || '');
+      setShowTextEditor({ id, field });
     }
   };
 
   const closeTextEditor = () => {
-    if (showTextEditor.id && showTextEditor.content !== undefined) {
-      updateSubscriptionItem(showTextEditor.id, showTextEditor.field, showTextEditor.content);
+    if (showTextEditor.id && editorRef.current) {
+      const content = editorRef.current.getContent();
+      updateSubscriptionItem(showTextEditor.id, showTextEditor.field, content);
     }
-    setShowTextEditor({ id: null, field: null, content: '' });
-  };
-
-  const handleEditorChange = (content) => {
-    setShowTextEditor(prev => ({
-      ...prev,
-      content: content
-    }));
+    setShowTextEditor({ id: null, field: null });
   };
 
   const downloadPDF = async () => {
     try {
       const { jsPDF } = await import('jspdf');
       const html2canvas = (await import('html2canvas')).default;
-      
-      console.log('Starting PDF generation...');
       
       const page1 = document.querySelector('.page-1');
       const page2 = document.querySelector('.page-2');
@@ -372,15 +326,31 @@ const QuotationForm = () => {
         return;
       }
 
-      console.log('Hiding no-print elements...');
       const noPrintElements = document.querySelectorAll('.no-print');
       noPrintElements.forEach(el => el.style.display = 'none');
 
+      // FIXED: Replace inputs with their values for PDF
       const inputs = document.querySelectorAll('.page-1 input, .page-1 textarea');
-      const originalPlaceholders = [];
+      const originalElements = [];
+
       inputs.forEach(input => {
-        originalPlaceholders.push(input.placeholder);
-        input.placeholder = '';
+        const span = document.createElement('div');
+        span.textContent = input.value;
+        span.style.cssText = window.getComputedStyle(input).cssText;
+        span.style.border = 'none';
+        span.style.background = 'transparent';
+        span.style.minHeight = input.style.minHeight;
+        span.style.padding = input.style.padding;
+        span.style.fontSize = input.style.fontSize;
+        span.style.fontFamily = input.style.fontFamily;
+        span.style.fontWeight = input.style.fontWeight;
+        span.style.whiteSpace = input.tagName === 'TEXTAREA' ? 'pre-wrap' : 'normal';
+        span.style.width = input.style.width;
+        span.style.boxSizing = 'border-box';
+        span.className = 'pdf-value-replacement';
+        
+        originalElements.push({ input, parent: input.parentNode, nextSibling: input.nextSibling });
+        input.parentNode.replaceChild(span, input);
       });
 
       const pdf = new jsPDF({
@@ -393,7 +363,6 @@ const QuotationForm = () => {
       const pdfWidth = 210;
       const pdfHeight = 297;
 
-      console.log('Capturing Page 1...');
       const canvas1 = await html2canvas(page1, {
         scale: 3,
         useCORS: true,
@@ -407,7 +376,6 @@ const QuotationForm = () => {
 
       pdf.addPage();
 
-      console.log('Capturing Page 2...');
       const canvas2 = await html2canvas(page2, {
         scale: 3,
         useCORS: true,
@@ -419,9 +387,19 @@ const QuotationForm = () => {
       const imgHeight2 = (canvas2.height * pdfWidth) / canvas2.width;
       pdf.addImage(imgData2, 'JPEG', 0, 0, pdfWidth, Math.min(imgHeight2, pdfHeight));
 
-      inputs.forEach((input, idx) => {
-        input.placeholder = originalPlaceholders[idx];
+      // FIXED: Restore original inputs
+      originalElements.forEach(({ input, parent, nextSibling }) => {
+        const span = parent.querySelector('.pdf-value-replacement');
+        if (span) {
+          if (nextSibling) {
+            parent.insertBefore(input, nextSibling);
+          } else {
+            parent.appendChild(input);
+          }
+          span.remove();
+        }
       });
+
       noPrintElements.forEach(el => el.style.display = '');
 
       const filename = `quotation-${quotationInfo.number.replace(/\//g, '-')}.pdf`;
@@ -445,57 +423,6 @@ const QuotationForm = () => {
         setCurrentQuotationId(null);
       }
     }
-  };
-
-  const QuillEditor = () => {
-    return (
-      <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:50,padding:'16px'}} className="no-print">
-        <div style={{background:'#fff',borderRadius:'8px',padding:'24px',width:'100%',maxWidth:'900px',maxHeight:'90vh',overflow:'auto'}}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'16px'}}>
-            <h3 style={{fontSize:'20px',fontWeight:'bold',margin:0}}>Rich Text Editor</h3>
-            <button onClick={closeTextEditor} style={{background:'none',border:'none',cursor:'pointer',color:'#6b7280'}}>
-              <X size={24} />
-            </button>
-          </div>
-          
-          {/* Quill Editor */}
-          <div style={{
-            border: '2px solid #d1d5db',
-            borderRadius: '6px',
-            minHeight: '300px',
-            background: '#fff'
-          }}>
-            <ReactQuill
-              ref={quillRef}
-              value={showTextEditor.content}
-              onChange={handleEditorChange}
-              modules={quillModules}
-              formats={quillFormats}
-              theme="snow"
-              style={{
-                height: '300px',
-                border: 'none'
-              }}
-            />
-          </div>
-
-          <div style={{display:'flex',justifyContent:'flex-end',gap:'12px',marginTop:'20px'}}>
-            <button 
-              onClick={closeTextEditor} 
-              style={{padding:'10px 20px',background:'#6b7280',color:'#fff',border:'none',borderRadius:'6px',cursor:'pointer',fontWeight:'500',fontSize:'14px'}}
-            >
-              Cancel
-            </button>
-            <button 
-              onClick={closeTextEditor} 
-              style={{padding:'10px 20px',background:'#3b82f6',color:'#fff',border:'none',borderRadius:'6px',cursor:'pointer',fontWeight:'500',fontSize:'14px'}}
-            >
-              Apply Changes
-            </button>
-          </div>
-        </div>
-      </div>
-    );
   };
 
   const CalendarComponent = ({ onDateSelect }) => {
@@ -568,7 +495,7 @@ const QuotationForm = () => {
             <button onClick={() => changeYear(1)} style={{padding:'4px',cursor:'pointer',border:'none',background:'transparent'}}>››</button>
           </div>
         </div>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:'4px',textAlign:'center',fontSize:'12px',color:'#6b7280',marginBottom:'8px'}}>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:'4px',textAlign:'center',fontSize:'12px',color:'6b7280',marginBottom:'8px'}}>
           {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(d => <div key={d} style={{fontWeight:'500'}}>{d}</div>)}
         </div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:'4px'}}>{days}</div>
@@ -584,6 +511,73 @@ const QuotationForm = () => {
           <button onClick={() => setShowDatePicker(false)} style={{padding:'4px 12px',background:'#6b7280',color:'#fff',border:'none',borderRadius:'4px',fontSize:'14px',cursor:'pointer'}}>
             Close
           </button>
+        </div>
+      </div>
+    );
+  };
+
+  const TinyMCEEditor = () => {
+    return (
+      <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:50,padding:'16px'}} className="no-print">
+        <div style={{background:'#fff',borderRadius:'8px',padding:'24px',width:'100%',maxWidth:'900px',maxHeight:'90vh',overflow:'auto'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'16px'}}>
+            <h3 style={{fontSize:'20px',fontWeight:'bold',margin:0}}>Rich Text Editor</h3>
+            <button onClick={closeTextEditor} style={{background:'none',border:'none',cursor:'pointer',color:'#6b7280'}}>
+              <X size={24} />
+            </button>
+          </div>
+          
+          <Editor
+            apiKey="g1kgvpz3sdqd2dq5uhk0i206p7ejh2ttx7drt78gh6tzah7g"
+            onInit={(evt, editor) => editorRef.current = editor}
+            initialValue={editorContent}
+            init={{
+              height: 400,
+              menubar: true,
+              plugins: [
+                'advlist', 'autolink', 'lists', 'link', 'image', 'charmap', 'preview',
+                'anchor', 'searchreplace', 'visualblocks', 'code', 'fullscreen',
+                'insertdatetime', 'media', 'table', 'code', 'help', 'wordcount',
+                'textcolor', 'colorpicker', 'textpattern', 'paste', 'highlight'
+              ],
+              toolbar: 'undo redo | blocks | ' +
+                'bold italic underline strikethrough | alignleft aligncenter ' +
+                'alignright alignjustify | bullist numlist outdent indent | ' +
+                'forecolor backcolor | fontfamily fontsize | ' +
+                'link image media | removeformat | help',
+              font_formats: 'Arial=arial,helvetica,sans-serif; Times New Roman=times new roman,times,serif; Georgia=georgia,serif; Verdana=verdana,geneva,sans-serif; Courier New=courier new,courier,monospace; Tahoma=tahoma,arial,helvetica,sans-serif; Comic Sans MS=comic sans ms,cursive; Impact=impact,sans-serif',
+              content_style: 'body { font-family:Arial,sans-serif; font-size:14px }',
+              paste_as_text: false,
+              paste_data_images: true,
+              automatic_uploads: true,
+              file_picker_types: 'image',
+              images_upload_handler: (blobInfo, progress) => new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => {
+                  resolve(reader.result);
+                };
+                reader.onerror = () => {
+                  reject('Error reading file');
+                };
+                reader.readAsDataURL(blobInfo.blob());
+              })
+            }}
+          />
+
+          <div style={{display:'flex',justifyContent:'flex-end',gap:'12px',marginTop:'20px'}}>
+            <button 
+              onClick={() => setShowTextEditor({ id: null, field: null })} 
+              style={{padding:'10px 20px',background:'#6b7280',color:'#fff',border:'none',borderRadius:'6px',cursor:'pointer',fontWeight:'500',fontSize:'14px'}}
+            >
+              Cancel
+            </button>
+            <button 
+              onClick={closeTextEditor} 
+              style={{padding:'10px 20px',background:'#3b82f6',color:'#fff',border:'none',borderRadius:'6px',cursor:'pointer',fontWeight:'500',fontSize:'14px'}}
+            >
+              Apply Changes
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -613,7 +607,6 @@ const QuotationForm = () => {
               </div>
             </div>
             <div style={{display:'flex',gap:'8px',flexDirection:'column',alignItems:'flex-end'}}>
-              {/* Calendar Selection */}
               <div style={{position:'relative'}}>
                 <button 
                   onClick={() => setShowDatePicker(!showDatePicker)}
@@ -628,7 +621,6 @@ const QuotationForm = () => {
                 )}
               </div>
               
-              {/* Amount and Currency Controls */}
               <div style={{display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap'}}>
                 <div style={{display:'flex',alignItems:'center',gap:'8px',background:'#f8fafc',padding:'8px 12px',borderRadius:'6px',border:'1px solid #e2e8f0'}}>
                   <span style={{fontSize:'14px',fontWeight:'500',color:'#374151'}}>Amount:</span>
@@ -677,7 +669,6 @@ const QuotationForm = () => {
             </div>
           </div>
 
-          {/* Edit Mode Toggle */}
           <div style={{display:'flex',justifyContent:'center',marginTop:'16px',padding:'12px',background:'#f8fafc',borderRadius:'6px',border:'1px solid #e2e8f0'}}>
             <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
               <span style={{fontSize:'16px',fontWeight:'600',color:'#374151'}}>Edit Mode:</span>
@@ -759,7 +750,7 @@ const QuotationForm = () => {
           margin:'0 auto'
         }} className="quotation-content">
           
-          {showTextEditor.id && <QuillEditor />}
+          {showTextEditor.id && <TinyMCEEditor />}
 
           {/* PAGE 1 - MAIN QUOTATION */}
           <div className="page page-1" style={{
@@ -812,7 +803,7 @@ const QuotationForm = () => {
               </div>
             </div>
 
-            {/* Client Info */}
+            {/* Client Info - WITH INPUT FIELDS */}
             <div style={{
               display:'grid',
               gridTemplateColumns:'1fr 1fr',
@@ -823,54 +814,83 @@ const QuotationForm = () => {
               <div>
                 <div style={{marginBottom:'4mm'}}>
                   <div style={{fontSize:'11pt',fontWeight:'bold',marginBottom:'2mm'}}>Client Name</div>
-                  <div style={{
-                    width:'100%',
-                    padding:'2mm',
-                    fontSize:'11pt',
-                    minHeight:'6mm',
-                    background:'#fff'
-                  }}>
-                    {formData.clientName || 'Enter client name'}
-                  </div>
+                  <input
+                    type="text"
+                    value={formData.clientName}
+                    onChange={(e) => handleFormChange('clientName', e.target.value)}
+                    placeholder="Enter client name"
+                    style={{
+                      width: '100%',
+                      padding: '2mm',
+                      fontSize: '11pt',
+                      minHeight: '6mm',
+                      background: '#fff',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '2px',
+                      fontFamily: 'Arial, sans-serif'
+                    }}
+                  />
                 </div>
                 <div style={{marginBottom:'4mm'}}>
                   <div style={{fontSize:'11pt',fontWeight:'bold',marginBottom:'2mm'}}>Contact Person</div>
-                  <div style={{
-                    width:'100%',
-                    padding:'2mm',
-                    fontSize:'11pt',
-                    minHeight:'6mm',
-                    background:'#fff'
-                  }}>
-                    {formData.contactPerson || 'Enter contact person'}
-                  </div>
+                  <input
+                    type="text"
+                    value={formData.contactPerson}
+                    onChange={(e) => handleFormChange('contactPerson', e.target.value)}
+                    placeholder="Enter contact person"
+                    style={{
+                      width: '100%',
+                      padding: '2mm',
+                      fontSize: '11pt',
+                      minHeight: '6mm',
+                      background: '#fff',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '2px',
+                      fontFamily: 'Arial, sans-serif'
+                    }}
+                  />
                 </div>
               </div>
 
               <div>
                 <div style={{marginBottom:'4mm'}}>
                   <div style={{fontSize:'11pt',fontWeight:'bold',marginBottom:'2mm'}}>Address</div>
-                  <div style={{
-                    width:'100%',
-                    padding:'2mm',
-                    fontSize:'11pt',
-                    minHeight:'12mm',
-                    background:'#fff'
-                  }}>
-                    {formData.address || 'Enter client address'}
-                  </div>
+                  <textarea
+                    value={formData.address}
+                    onChange={(e) => handleFormChange('address', e.target.value)}
+                    placeholder="Enter client address"
+                    style={{
+                      width: '100%',
+                      padding: '2mm',
+                      fontSize: '11pt',
+                      minHeight: '12mm',
+                      background: '#fff',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '2px',
+                      fontFamily: 'Arial, sans-serif',
+                      resize: 'vertical'
+                    }}
+                    rows={3}
+                  />
                 </div>
                 <div>
                   <div style={{fontSize:'11pt',fontWeight:'bold',marginBottom:'2mm'}}>Phone/Mobile</div>
-                  <div style={{
-                    width:'100%',
-                    padding:'2mm',
-                    fontSize:'11pt',
-                    minHeight:'6mm',
-                    background:'#fff'
-                  }}>
-                    {formData.phone || 'Enter phone number'}
-                  </div>
+                  <input
+                    type="text"
+                    value={formData.phone}
+                    onChange={(e) => handleFormChange('phone', e.target.value)}
+                    placeholder="Enter phone number"
+                    style={{
+                      width: '100%',
+                      padding: '2mm',
+                      fontSize: '11pt',
+                      minHeight: '6mm',
+                      background: '#fff',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '2px',
+                      fontFamily: 'Arial, sans-serif'
+                    }}
+                  />
                 </div>
               </div>
             </div>
@@ -958,17 +978,15 @@ const QuotationForm = () => {
               </table>
             </div>
 
-            {/* Amount Section - CENTERED */}
+            {/* Amount Section */}
             <div style={{padding:'4mm 15mm 4mm 15mm',borderBottom:'1px solid #000'}}>
-              <h3 style={{fontSize:'12pt',fontWeight:'bold',marginBottom:'2mm',margin:0, textAlign:'center'}}>AMOUNT</h3>
+              <h3 style={{fontSize:'12pt',fontWeight:'bold',marginBottom:'2mm',margin:0}}>AMOUNT</h3>
               
               <div style={{display:'flex',justifyContent:'center',gap:'3mm',alignItems:'center',marginTop:'2mm',flexWrap:'wrap'}}>
                 <div style={{
                   padding:'1mm 2mm',
                   fontSize:'11pt',
                   fontWeight:'bold',
-                  border:'1px solid #000',
-                  borderRadius:'1mm',
                   background:'#fff',
                   minWidth:'25mm',
                   textAlign:'center'
@@ -980,11 +998,12 @@ const QuotationForm = () => {
                   padding:'1mm 2mm',
                   fontSize:'11pt',
                   fontWeight:'bold',
-                  border:'1px solid #000',
-                  borderRadius:'1mm',
                   minWidth:'30mm',
                   background:'#fff',
-                  textAlign:'center'
+                  textAlign:'center',
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center'
                 }}>
                   {formData.amount || 'Enter amount'}
                 </div>
@@ -1253,9 +1272,15 @@ const QuotationForm = () => {
             line-height: 1.4 !important;
             color: #000 !important;
           }
+
+          input, textarea {
+            border: none !important;
+            background: transparent !important;
+            box-shadow: none !important;
+            outline: none !important;
+          }
         }
         
-        /* Enhanced Media Responsiveness */
         @media screen and (max-width: 768px) {
           .quotation-content {
             width: 100% !important;
@@ -1266,20 +1291,6 @@ const QuotationForm = () => {
           
           .page {
             margin-bottom: 10px !important;
-          }
-          
-          .no-print .control-panel {
-            padding: 10px !important;
-          }
-          
-          .no-print button {
-            padding: 8px 12px !important;
-            font-size: 12px !important;
-          }
-          
-          .no-print .control-buttons {
-            flex-direction: column !important;
-            gap: 8px !important;
           }
         }
         
@@ -1304,33 +1315,6 @@ const QuotationForm = () => {
             transform-origin: top center;
             margin: -40px auto !important;
           }
-          
-          .no-print .control-panel {
-            padding: 8px !important;
-          }
-          
-          .no-print button {
-            padding: 6px 10px !important;
-            font-size: 11px !important;
-          }
-          
-          .no-print .edit-toggle {
-            flex-direction: column !important;
-            gap: 8px !important;
-            text-align: center !important;
-          }
-        }
-        
-        @media screen and (max-width: 1024px) {
-          .no-print .header-controls {
-            flex-direction: column !important;
-            gap: 12px !important;
-          }
-          
-          .no-print .amount-controls {
-            flex-wrap: wrap !important;
-            justify-content: center !important;
-          }
         }
         
         body {
@@ -1348,7 +1332,6 @@ const QuotationForm = () => {
           word-wrap: break-word;
         }
         
-        /* Enhanced table responsiveness */
         @media screen and (max-width: 768px) {
           table {
             font-size: 9pt !important;
@@ -1359,47 +1342,26 @@ const QuotationForm = () => {
           }
         }
 
-        /* Quill Editor Styles */
-        .ql-editor {
-          min-height: 200px;
-          font-size: 14px;
-          line-height: 1.6;
+        .tox-tinymce {
+          border: 1px solid #d1d5db !important;
+          border-radius: 6px !important;
         }
         
-        .ql-toolbar {
-          border-top: 1px solid #ccc;
-          border-left: 1px solid #ccc;
-          border-right: 1px solid #ccc;
-          border-bottom: none;
-          border-radius: 6px 6px 0 0;
+        .tox .tox-toolbar {
+          background-color: #f8f9fa !important;
         }
         
-        .ql-container {
-          border-bottom: 1px solid #ccc;
-          border-left: 1px solid #ccc;
-          border-right: 1px solid #ccc;
-          border-top: none;
-          border-radius: 0 0 6px 6px;
+        .tox .tox-edit-area {
+          padding: 8px;
+        }
+
+        input, textarea {
+          transition: all 0.2s ease;
         }
         
-        .ql-editor p {
-          margin-bottom: 12px;
-        }
-        
-        .ql-editor h2 {
-          font-size: 1.5em;
-          font-weight: bold;
-          margin: 16px 0 8px 0;
-        }
-        
-        .ql-editor h3 {
-          font-size: 1.25em;
-          font-weight: bold;
-          margin: 12px 0 6px 0;
-        }
-        
-        .ql-editor ul, .ql-editor ol {
-          padding-left: 20px;
+        input:focus, textarea:focus {
+          border-color: #3b82f6 !important;
+          box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1) !important;
         }
       `}</style>
     </div>
