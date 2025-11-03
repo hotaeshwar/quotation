@@ -3,9 +3,6 @@ import { Download, Edit3, Plus, Trash2, Calendar, X, Save, FolderOpen, Menu } fr
 import { Editor } from '@tinymce/tinymce-react';
 import { Document, Page, Text, View, StyleSheet, pdf, Image } from '@react-pdf/renderer';
 import signatureImage from '../assets/images/signature1.png';
-// NOTE: To make signature blue, you need to edit the signature1.png image file itself
-// PDF renderers cannot change image colors via CSS. Use image editing software to change
-// the signature from black to blue (#0000FF) and save as signature1.png
 import companyLogo from '../assets/images/LOGO c.png';
 import { Buffer } from 'buffer';
 window.Buffer = Buffer;
@@ -234,9 +231,7 @@ const stripHtmlAndPreserveBreaks = (html) => {
 
 // PDF Document Component
 const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
-  // Dynamically calculate items per page based on content length
   const getItemsPerPage = () => {
-    // Fit 1 item per page to prevent overflow
     return 1;
   };
 
@@ -245,7 +240,6 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
 
   return (
     <Document>
-      {/* Main Content Pages */}
       {Array.from({ length: totalPages }, (_, pageIndex) => {
         const startIndex = pageIndex * itemsPerPage;
         const endIndex = startIndex + itemsPerPage;
@@ -254,7 +248,6 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
 
         return (
           <Page key={`page-${pageIndex}`} size="A4" style={styles.page}>
-            {/* Header with Logo - Only on first page */}
             {pageIndex === 0 && (
               <View style={styles.pageHeader}>
                 <View style={styles.addressSection}>
@@ -269,7 +262,6 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
               </View>
             )}
 
-            {/* Client Info - Only on first page */}
             {pageIndex === 0 && (
               <View style={{ marginBottom: 10, paddingBottom: 3 }}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
@@ -285,7 +277,6 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
               </View>
             )}
 
-            {/* Subscription Table */}
             <View style={{ flex: 1, justifyContent: pageIndex !== 0 && !isLastPage ? 'center' : 'flex-start', paddingTop: pageIndex !== 0 && !isLastPage ? 40 : 0, paddingBottom: pageIndex !== 0 && !isLastPage ? 40 : 0 }}>
               <View style={[styles.table, { width: '100%' }]}>
                 <View style={styles.tableRow}>
@@ -309,10 +300,8 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
               </View>
             </View>
 
-            {/* Footer Section - Only on last page */}
             {isLastPage && (
               <View style={{ marginTop: 0 }}>
-                {/* Amount Section */}
                 <View style={styles.amountSection}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
                     <Text style={[styles.amountText, { fontSize: 14 }]}>AMOUNT</Text>
@@ -326,7 +315,6 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
                   <Text style={[styles.text, { textAlign: 'center', marginTop: 1, fontFamily: 'Helvetica-Bold', marginBottom: 0 }]}>(GST EXTRA)</Text>
                 </View>
 
-                {/* Payment Details */}
                 <View style={{ marginBottom: 0.5, marginTop: 1 }}>
                   <Text style={[styles.sectionHeader, { marginTop: 0, marginBottom: 0.2 }]}>PAYMENT DETAILS</Text>
                   <View style={styles.paymentGrid}>
@@ -349,7 +337,6 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
                   </View>
                 </View>
 
-                {/* Declaration */}
                 <View style={{ marginBottom: 1, marginTop: 0.5 }}>
                   <Text style={[styles.sectionHeader, { marginTop: 0, marginBottom: 0.5 }]}>DECLARATION</Text>
                   <Text style={[styles.declarationText, { marginBottom: 0.5 }]}>
@@ -370,7 +357,6 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
                   ))}
                 </View>
 
-                {/* Signatures */}
                 <View style={[styles.signatureSection, { marginTop: 0, minHeight: 50 }]}>
                   <View style={styles.signatureBox}>
                     <Text style={styles.signatureLabel}>CLIENT SIGNATURE</Text>
@@ -391,7 +377,6 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
         );
       })}
 
-      {/* Terms & Conditions Page - Full page */}
       <Page size="A4" style={styles.page}>
         <View style={{ flex: 1, justifyContent: 'flex-start' }}>
           <Text style={[styles.header, { textAlign: 'center', marginBottom: 15, fontSize: 16 }]}>TERMS & CONDITIONS OF SERVICES</Text>
@@ -567,6 +552,28 @@ const useClickOutside = (ref, callback) => {
     return () => document.removeEventListener('mousedown', handleClick);
   }, [ref, callback]);
 };
+
+// MOVED OUTSIDE - FormField Component
+const FormField = ({ label, value, onChange, type = 'text', rows = 1 }) => (
+  <div className="mb-4">
+    <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+    {type === 'textarea' ? (
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        rows={rows}
+        className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+    ) : (
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+    )}
+  </div>
+);
 
 // Main QuotationForm Component
 const QuotationForm = () => {
@@ -749,27 +756,6 @@ const QuotationForm = () => {
     if (!content && !isEditing) return <div className="min-h-8 p-1">&nbsp;</div>;
     return <div dangerouslySetInnerHTML={{ __html: content }} className="min-h-8 p-1 whitespace-pre-wrap break-words leading-relaxed" />;
   };
-
-  const FormField = ({ label, value, onChange, type = 'text', rows = 1 }) => (
-    <div className="mb-4">
-      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
-      {type === 'textarea' ? (
-        <textarea
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          rows={rows}
-          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      ) : (
-        <input
-          type={type}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      )}
-    </div>
-  );
 
   return (
     <div className="min-h-screen bg-gray-100 flex">
@@ -960,12 +946,30 @@ const QuotationForm = () => {
               {/* Client Info */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                 <div className="space-y-3">
-                  <FormField label="Client Name" value={formData.clientName} onChange={(value) => handleFormChange('clientName', value)} />
-                  <FormField label="Contact Person" value={formData.contactPerson} onChange={(value) => handleFormChange('contactPerson', value)} />
-                  <FormField label="Phone/Mobile" value={formData.phone} onChange={(value) => handleFormChange('phone', value)} />
+                  <FormField 
+                    label="Client Name" 
+                    value={formData.clientName} 
+                    onChange={(value) => handleFormChange('clientName', value)} 
+                  />
+                  <FormField 
+                    label="Contact Person" 
+                    value={formData.contactPerson} 
+                    onChange={(value) => handleFormChange('contactPerson', value)} 
+                  />
+                  <FormField 
+                    label="Phone/Mobile" 
+                    value={formData.phone} 
+                    onChange={(value) => handleFormChange('phone', value)} 
+                  />
                 </div>
                 <div>
-                  <FormField label="Address" value={formData.address} onChange={(value) => handleFormChange('address', value)} type="textarea" rows={4} />
+                  <FormField 
+                    label="Address" 
+                    value={formData.address} 
+                    onChange={(value) => handleFormChange('address', value)} 
+                    type="textarea" 
+                    rows={4} 
+                  />
                 </div>
               </div>
 
