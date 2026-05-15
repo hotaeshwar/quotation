@@ -178,16 +178,16 @@ const styles = StyleSheet.create({
   paymentGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginBottom: 0.5,
+    marginBottom: 8,
   },
   paymentItem: {
     width: '50%',
-    marginBottom: 0.5,
+    marginBottom: 10,
   },
   paymentLabel: {
     fontSize: 10,
     fontFamily: 'Helvetica-Bold',
-    marginBottom: 0.5,
+    marginBottom: 4,
   },
   paymentValue: {
     fontSize: 10,
@@ -197,7 +197,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 6,
-    alignItems: 'flex-start',
+    alignItems: 'center',
   },
   addressSection: {
     flex: 1,
@@ -229,6 +229,30 @@ const stripHtmlAndPreserveBreaks = (html) => {
   return text.trim();
 };
 
+const numberToWords = (num) => {
+  if (!num) return '';
+  const a = ['', 'One ', 'Two ', 'Three ', 'Four ', 'Five ', 'Six ', 'Seven ', 'Eight ', 'Nine ', 'Ten ', 'Eleven ', 'Twelve ', 'Thirteen ', 'Fourteen ', 'Fifteen ', 'Sixteen ', 'Seventeen ', 'Eighteen ', 'Nineteen '];
+  const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+  const inWords = (num) => {
+    if ((num = num.toString()).length > 9) return 'overflow';
+    let n = ('000000000' + num).substr(-9).match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/);
+    if (!n) return; let str = '';
+    str += (n[1] != 0) ? (a[Number(n[1])] || b[n[1][0]] + ' ' + a[n[1][1]]) + 'Crore ' : '';
+    str += (n[2] != 0) ? (a[Number(n[2])] || b[n[2][0]] + ' ' + a[n[2][1]]) + 'Lakh ' : '';
+    str += (n[3] != 0) ? (a[Number(n[3])] || b[n[3][0]] + ' ' + a[n[3][1]]) + 'Thousand ' : '';
+    str += (n[4] != 0) ? (a[Number(n[4])] || b[n[4][0]] + ' ' + a[n[4][1]]) + 'Hundred ' : '';
+    str += (n[5] != 0) ? ((str != '') ? 'and ' : '') + (a[Number(n[5])] || b[n[5][0]] + ' ' + a[n[5][1]]) + 'Only ' : '';
+    return str;
+  }
+
+  let cleanNum = String(num).replace(/,/g, '');
+  let parts = cleanNum.split('.');
+  let wholePart = parseInt(parts[0], 10);
+  if (isNaN(wholePart) || wholePart === 0) return 'Zero Only';
+  return inWords(wholePart).trim();
+};
+
 const HtmlToPdf = ({ html, customStyle }) => {
   if (!html) return null;
   const parser = new window.DOMParser();
@@ -253,7 +277,7 @@ const HtmlToPdf = ({ html, customStyle }) => {
     if (node.nodeType === 1) {
       const tag = node.tagName.toLowerCase();
       let style = { ...inheritedStyle };
-      
+
       if (node.style.textAlign) style.textAlign = node.style.textAlign;
       if (node.getAttribute && node.getAttribute('align')) style.textAlign = node.getAttribute('align');
 
@@ -269,7 +293,7 @@ const HtmlToPdf = ({ html, customStyle }) => {
           </View>
         );
       }
-      
+
       if (tag === 'div') {
         return (
           <View key={index} style={{ marginBottom: 4, width: '100%' }}>
@@ -277,42 +301,49 @@ const HtmlToPdf = ({ html, customStyle }) => {
           </View>
         );
       }
-      
+
       if (tag === 'ul' || tag === 'ol') {
+        let liIndex = 0;
         return (
           <View key={index} style={{ marginBottom: 4, paddingLeft: 10, width: '100%' }}>
             {Array.from(node.childNodes).map((child, i) => {
               if (child.nodeType === 1 && child.tagName.toLowerCase() === 'li') {
+                liIndex++;
                 return (
                   <View key={`li-${i}`} style={{ flexDirection: 'row', marginBottom: 2, width: '100%' }}>
-                    <Text style={[customStyle, style, { width: 14 }]}>{tag === 'ol' ? `${i + 1}.` : '•'}</Text>
+                    <Text style={[customStyle, style, { width: 16 }]}>{tag === 'ol' ? `${liIndex}.` : '•'}</Text>
                     <View style={{ flex: 1 }}>
                       {processChildren(child.childNodes, style)}
                     </View>
                   </View>
                 );
               }
-              return renderNode(child, i, style);
-            })}
+              const rendered = renderNode(child, i, style);
+              if (typeof rendered === 'string' || typeof rendered === 'number') {
+                if (!String(rendered).trim()) return null;
+                return <Text key={`str-${i}`} style={[customStyle, style]}>{rendered}</Text>;
+              }
+              return rendered;
+            }).filter(Boolean)}
           </View>
         );
       }
-      
+
       if (tag === 'li') {
         return (
           <View key={index} style={{ flexDirection: 'row', marginBottom: 2, width: '100%' }}>
-            <Text style={[customStyle, style, { width: 14 }]}>•</Text>
+            <Text style={[customStyle, style, { width: 16 }]}>{'•'}</Text>
             <View style={{ flex: 1 }}>
               {processChildren(node.childNodes, style)}
             </View>
           </View>
         );
       }
-      
+
       if (tag === 'br') {
         return '\n';
       }
-      
+
       const children = Array.from(node.childNodes).map((child, i) => renderNode(child, i, style));
       return <Text key={index} style={style}>{children}</Text>;
     }
@@ -366,29 +397,29 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
             <View style={{ justifyContent: 'flex-start' }}>
               <View style={[styles.table, { width: '100%' }]}>
                 <View style={[styles.tableRow, { borderTopWidth: 1, borderLeftWidth: 1, borderRightWidth: 1, borderColor: '#000' }]} fixed>
-                  <View style={[styles.tableColHeader, { width: '8%', borderBottomWidth: 1, justifyContent: 'center' }]}>
+                  <View style={[styles.tableColHeader, { width: '15%', borderBottomWidth: 1, justifyContent: 'center' }]}>
                     <Text style={[styles.tableCellBold, { textAlign: 'center', margin: 2 }]}>S.No</Text>
                   </View>
-                  <View style={[styles.tableCol, { width: '92%', backgroundColor: '#f0f0f0', borderBottomWidth: 1, justifyContent: 'center' }]}>
+                  <View style={[styles.tableCol, { width: '85%', backgroundColor: '#f0f0f0', borderBottomWidth: 1, justifyContent: 'center' }]}>
                     <Text style={styles.tableCellBold}>SUBSCRIPTION</Text>
                   </View>
                 </View>
                 <View style={[styles.tableRow, { borderLeftWidth: 1, borderRightWidth: 1, borderBottomWidth: 1, borderColor: '#000' }]}>
-                  <View style={[styles.tableColHeader, { width: '8%', borderBottomWidth: 0 }]}>
+                  <View style={[styles.tableColHeader, { width: '15%', borderBottomWidth: 0 }]}>
                     <Text style={[styles.tableCell, { textAlign: 'center' }]}>
                       {stripHtmlAndPreserveBreaks(item.serialNumber)}
                     </Text>
                   </View>
-                  <View style={[styles.tableCol, { width: '92%', borderBottomWidth: 0 }]}>
-                    <HtmlToPdf 
-                      html={item.subscription} 
-                      customStyle={{ ...styles.tableCell, padding: 0, margin: 0 }} 
+                  <View style={[styles.tableCol, { width: '85%', borderBottomWidth: 0 }]}>
+                    <HtmlToPdf
+                      html={item.subscription}
+                      customStyle={{ ...styles.tableCell, padding: 0, margin: 0 }}
                     />
                   </View>
                 </View>
               </View>
             </View>
-            
+
             {isLastItem && (
               <View style={{ marginTop: 20 }} wrap={false}>
                 <View style={styles.amountSection}>
@@ -401,7 +432,10 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
                       {formData.amount}
                     </Text>}
                   </View>
-                  <Text style={[styles.text, { textAlign: 'center', marginTop: 1, fontFamily: 'Helvetica-Bold', marginBottom: 0 }]}>(GST EXTRA)</Text>
+                  {formData.amount && <Text style={[styles.text, { textAlign: 'center', marginTop: 4, fontFamily: 'Helvetica-Bold', fontSize: 11 }]}>
+                    Amount in words: {numberToWords(formData.amount)}
+                  </Text>}
+                  <Text style={[styles.text, { textAlign: 'center', marginTop: 4, fontFamily: 'Helvetica-Bold', marginBottom: 2 }]}>(GST EXTRA)</Text>
                 </View>
 
                 <View style={{ marginBottom: 15, marginTop: 15 }}>
@@ -424,6 +458,9 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
                       <Text style={styles.paymentValue}>{formData.ifscCode}</Text>
                     </View>
                   </View>
+                  <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 12, marginTop: 10 }}>
+                    # Cheque should be drawn in favour of de'Vine sTudio
+                  </Text>
                 </View>
 
                 <View style={{ marginBottom: 15, marginTop: 15 }}>
@@ -676,7 +713,30 @@ const QuotationForm = () => {
   const [editorContent, setEditorContent] = useState('');
   const [formData, setFormData] = useState(INITIAL_FORM_DATA);
   const [quotationInfo, setQuotationInfo] = useState(INITIAL_QUOTATION_INFO);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [activeTab, setActiveTab] = useState('editor');
+  const [openFolders, setOpenFolders] = useState({});
+
+  const groupedQuotations = React.useMemo(() => {
+    const groupsMap = {};
+    const sorted = [...savedQuotations].sort((a, b) => new Date(b.savedAt || 0) - new Date(a.savedAt || 0));
+
+    sorted.forEach(quot => {
+      const date = new Date(quot.savedAt || Date.now());
+      const monthYear = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      const groupKey = `${date.getFullYear()}-${String(date.getMonth()).padStart(2, '0')}`;
+
+      if (!groupsMap[groupKey]) {
+        groupsMap[groupKey] = { label: monthYear, quotations: [] };
+      }
+      groupsMap[groupKey].quotations.push(quot);
+    });
+
+    return Object.keys(groupsMap).sort().reverse().map(key => groupsMap[key]);
+  }, [savedQuotations]);
+
+  const toggleFolder = (label) => {
+    setOpenFolders(prev => ({ ...prev, [label]: !prev[label] }));
+  };
 
   const editorRef = useRef(null);
   const calendarRef = useRef(null);
@@ -870,160 +930,53 @@ const QuotationForm = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 flex">
-      {/* Sidebar */}
-      <div className={`${sidebarOpen ? 'w-80' : 'w-0'} bg-white shadow-lg transition-all duration-300 overflow-hidden print:hidden flex-shrink-0`}>
-        <div className="p-4 h-full overflow-y-auto">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-bold text-gray-800">Controls</h2>
-            <button onClick={() => setSidebarOpen(false)} className="p-1 hover:bg-gray-100 rounded">
-              <X size={20} />
-            </button>
-          </div>
-
-          <div className="space-y-3">
-            <button
-              onClick={generateNewQuotation}
-              className="w-full px-3 py-2 bg-green-500 text-white text-sm rounded-md hover:bg-green-600 flex items-center gap-2 justify-center"
-            >
-              <Plus size={16} /> New Quotation
-            </button>
-
-            <button
-              onClick={saveQuotation}
-              className="w-full px-3 py-2 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-600 flex items-center gap-2 justify-center"
-            >
-              <Save size={16} /> Save
-            </button>
-
-            <button
-              onClick={() => setShowSavedQuotations(!showSavedQuotations)}
-              className="w-full px-3 py-2 bg-purple-500 text-white text-sm rounded-md hover:bg-purple-600 flex items-center gap-2 justify-center"
-            >
-              <FolderOpen size={16} /> Saved ({savedQuotations.length})
-            </button>
-
-            <button
-              onClick={markAsRevised}
-              className="w-full px-3 py-2 bg-orange-500 text-white text-sm rounded-md hover:bg-orange-600 text-sm"
-            >
-              Mark as Revised
-            </button>
-
-            <div className="relative">
-              <button
-                onClick={() => setShowDatePicker(!showDatePicker)}
-                className="w-full px-3 py-2 bg-gray-500 text-white text-sm rounded-md hover:bg-gray-600 flex items-center gap-2 justify-center"
-              >
-                <Calendar size={16} /> Select Date
-              </button>
-              {showDatePicker && (
-                <div ref={calendarRef} className="absolute top-full left-0 mt-2 z-10">
-                  <CalendarComponent onDateSelect={handleDateSelect} />
-                </div>
-              )}
+    <div className="min-h-screen bg-gray-100 flex flex-col">
+      {/* Top Navigation Bar */}
+      <div className="bg-white shadow-sm border-b print:hidden">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex gap-4">
+              <button onClick={() => setActiveTab('editor')} className={`px-4 py-2 text-sm font-medium border-b-2 ${activeTab === 'editor' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Form Editor</button>
+              <button onClick={() => setActiveTab('saved')} className={`px-4 py-2 text-sm font-medium border-b-2 ${activeTab === 'saved' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Saved Quotations ({savedQuotations.length})</button>
             </div>
-
-            <div className="border-t pt-3">
-              <label className="block text-xs font-medium text-gray-700 mb-1">Amount</label>
-              <input
-                type="text"
-                value={formData.amount}
-                onChange={(e) => handleAmountChange(e.target.value)}
-                placeholder="Enter amount"
-                className="w-full border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Currency</label>
-              <select
-                value={formData.displayCurrency}
-                onChange={(e) => handleCurrencyChange(e.target.value)}
-                className="w-full border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {Object.keys(CURRENCY_SYMBOLS).map(currency => (
-                  <option key={currency} value={currency}>{currency} ({CURRENCY_SYMBOLS[currency]})</option>
-                ))}
-              </select>
-            </div>
-
-            <button
-              onClick={downloadPDF}
-              className="w-full px-3 py-2 bg-red-500 text-white text-sm rounded-md hover:bg-red-600 flex items-center gap-2 justify-center"
-            >
-              <Download size={16} /> Download PDF
-            </button>
-
-            <div className="border-t pt-3">
-              <button
-                onClick={toggleEditMode}
-                className={`w-full px-3 py-2 rounded-md flex items-center gap-2 justify-center text-sm ${isEditing ? 'bg-green-500 text-white' : 'bg-gray-300 text-gray-700'
-                  }`}
-              >
-                <Edit3 size={16} /> {isEditing ? 'Editing ON' : 'Editing OFF'}
-              </button>
-              <p className="text-xs text-gray-600 mt-2">
-                {isEditing ? 'Click table cells to edit' : 'Enable to modify content'}
-              </p>
-            </div>
-
-            {showSavedQuotations && (
-              <div className="border-t pt-3">
-                <h3 className="text-sm font-semibold mb-2">Saved Quotations</h3>
-                {savedQuotations.length === 0 ? (
-                  <p className="text-xs text-gray-500">No saved quotations</p>
-                ) : (
-                  <div className="space-y-2 max-h-60 overflow-y-auto">
-                    {savedQuotations.map(quot => (
-                      <div key={quot.id} className="p-2 bg-gray-50 rounded border text-xs">
-                        <div className="font-medium flex items-center gap-2 mb-1">
-                          {quot.quotationInfo.number}
-                          {quot.formData.isRevised && (
-                            <span className="bg-orange-500 text-white text-xs px-1 py-0.5 rounded">
-                              R{quot.formData.revisionNumber}
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-xs text-gray-600 mb-2">
-                          {quot.formData.clientName || 'N/A'}
-                        </div>
-                        <div className="flex gap-1">
-                          <button
-                            onClick={() => loadQuotation(quot)}
-                            className="flex-1 px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
-                          >
-                            Load
-                          </button>
-                          <button
-                            onClick={() => deleteQuotation(quot.id)}
-                            className="flex-1 px-2 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+            {activeTab === 'editor' && (
+              <div className="flex items-center gap-2">
+                <button onClick={generateNewQuotation} className="px-3 py-1.5 flex items-center gap-1 bg-green-500 text-white text-xs rounded hover:bg-green-600"><Plus size={14} /> New</button>
+                <button onClick={saveQuotation} className="px-3 py-1.5 flex items-center gap-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"><Save size={14} /> Save</button>
+                <button onClick={downloadPDF} className="px-3 py-1.5 flex items-center gap-1 bg-red-500 text-white text-xs rounded hover:bg-red-600"><Download size={14} /> PDF</button>
+                <button onClick={markAsRevised} className="px-3 py-1.5 bg-orange-500 text-white text-xs rounded hover:bg-orange-600">Mark Revised</button>
               </div>
             )}
           </div>
         </div>
+        {activeTab === 'editor' && (
+          <div className="bg-gray-50 px-4 py-2 border-t flex flex-wrap items-center justify-between gap-4">
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-gray-600">Amount:</span>
+                <input type="text" value={formData.amount} onChange={(e) => handleAmountChange(e.target.value)} className="w-32 border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Enter amount" />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-gray-600">Currency:</span>
+                <select value={formData.displayCurrency} onChange={(e) => handleCurrencyChange(e.target.value)} className="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  {Object.keys(CURRENCY_SYMBOLS).map(c => <option key={c} value={c}>{c} ({CURRENCY_SYMBOLS[c]})</option>)}
+                </select>
+              </div>
+              <div className="relative">
+                <button onClick={() => setShowDatePicker(!showDatePicker)} className="flex items-center gap-1 text-xs text-gray-700 hover:text-gray-900 border border-gray-300 px-3 py-1.5 rounded bg-white hover:bg-gray-50"><Calendar size={14} /> Select Date</button>
+                {showDatePicker && <div ref={calendarRef} className="absolute top-full left-0 mt-1 z-50 shadow-lg border rounded-lg bg-white"><CalendarComponent onDateSelect={handleDateSelect} /></div>}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={toggleEditMode} className={`px-3 py-1.5 rounded flex items-center gap-2 text-xs ${isEditing ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-700'}`}><Edit3 size={14} /> {isEditing ? 'Editing ON' : 'Editing OFF'}</button>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Main Content */}
-      <div className="flex-1 overflow-y-auto">
-        {!sidebarOpen && (
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="fixed top-4 left-4 z-10 p-2 bg-white shadow-lg rounded-md hover:bg-gray-100 print:hidden"
-          >
-            <Menu size={24} />
-          </button>
-        )}
-
-        <div className="p-4">
+      {/* Main Content Area */}
+      <div className="flex-1 overflow-y-auto p-4">
+        {activeTab === 'editor' ? (
           <div className="bg-white shadow-lg rounded-lg overflow-hidden max-w-4xl mx-auto print:shadow-none print:max-w-none">
             {showTextEditor.id && (
               <TinyMCEEditor
@@ -1058,29 +1011,29 @@ const QuotationForm = () => {
               {/* Client Info */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                 <div className="space-y-3">
-                  <FormField 
-                    label="Client Name" 
-                    value={formData.clientName} 
-                    onChange={(value) => handleFormChange('clientName', value)} 
+                  <FormField
+                    label="Client Name"
+                    value={formData.clientName}
+                    onChange={(value) => handleFormChange('clientName', value)}
                   />
-                  <FormField 
-                    label="Contact Person" 
-                    value={formData.contactPerson} 
-                    onChange={(value) => handleFormChange('contactPerson', value)} 
+                  <FormField
+                    label="Contact Person"
+                    value={formData.contactPerson}
+                    onChange={(value) => handleFormChange('contactPerson', value)}
                   />
-                  <FormField 
-                    label="Phone/Mobile" 
-                    value={formData.phone} 
-                    onChange={(value) => handleFormChange('phone', value)} 
+                  <FormField
+                    label="Phone/Mobile"
+                    value={formData.phone}
+                    onChange={(value) => handleFormChange('phone', value)}
                   />
                 </div>
                 <div>
-                  <FormField 
-                    label="Address" 
-                    value={formData.address} 
-                    onChange={(value) => handleFormChange('address', value)} 
-                    type="textarea" 
-                    rows={4} 
+                  <FormField
+                    label="Address"
+                    value={formData.address}
+                    onChange={(value) => handleFormChange('address', value)}
+                    type="textarea"
+                    rows={4}
                   />
                 </div>
               </div>
@@ -1282,7 +1235,52 @@ const QuotationForm = () => {
               </div>
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="max-w-4xl mx-auto bg-white shadow-lg rounded-lg p-6 my-6 print:hidden">
+            <h2 className="text-xl font-bold mb-6">Saved Quotations</h2>
+            {groupedQuotations.length === 0 ? (
+              <p className="text-gray-500">No saved quotations found.</p>
+            ) : (
+              <div className="space-y-4">
+                {groupedQuotations.map(group => (
+                  <div key={group.label} className="border border-gray-200 rounded-lg overflow-hidden">
+                    <button onClick={() => toggleFolder(group.label)} className="w-full px-4 py-3 bg-gray-50 flex items-center justify-between hover:bg-gray-100 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <FolderOpen size={20} className="text-blue-500" />
+                        <span className="font-semibold text-gray-800 text-lg">{group.label}</span>
+                        <span className="text-xs text-blue-800 bg-blue-100 font-bold px-2.5 py-0.5 rounded-full">{group.quotations.length}</span>
+                      </div>
+                      <span className="text-gray-400 font-bold">{openFolders[group.label] ? '▼' : '▶'}</span>
+                    </button>
+                    
+                    {openFolders[group.label] && (
+                      <div className="divide-y divide-gray-100 bg-white">
+                        {group.quotations.map(quot => (
+                          <div key={quot.id} className="p-4 flex items-center justify-between hover:bg-gray-50">
+                            <div>
+                              <div className="font-medium flex items-center gap-2 text-gray-900">
+                                {quot.quotationInfo.number}
+                                {quot.formData.isRevised && (
+                                  <span className="bg-orange-500 text-white text-xs px-1.5 py-0.5 rounded">R{quot.formData.revisionNumber}</span>
+                                )}
+                              </div>
+                              <div className="text-sm text-gray-600 mt-1 font-medium">{quot.formData.clientName || 'No Client Name'}</div>
+                              <div className="text-xs text-gray-400 mt-1">Saved on: {new Date(quot.savedAt || Date.now()).toLocaleString()}</div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button onClick={() => { loadQuotation(quot); setActiveTab('editor'); }} className="px-4 py-1.5 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-600 transition-colors font-medium">Load</button>
+                              <button onClick={() => deleteQuotation(quot.id)} className="px-4 py-1.5 bg-white text-red-500 text-sm rounded-md hover:bg-red-50 border border-red-200 transition-colors font-medium">Delete</button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
