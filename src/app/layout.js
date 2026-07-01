@@ -1,7 +1,7 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "BID QOUTATION",
+  title: "Quotation",
   description: "Generate and manage quotations easily",
   icons: {
     icon: "/images/LOGO c.png",
