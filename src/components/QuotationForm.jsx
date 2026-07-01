@@ -1,0 +1,1697 @@
+"use client";
+
+import React, { useState, useEffect, useRef } from 'react';
+import { Download, Edit3, Plus, Trash2, Calendar, X, Save, FolderOpen, Menu, FileText } from 'lucide-react';
+import { Editor } from '@tinymce/tinymce-react';
+import { Document, Page, Text, View, StyleSheet, pdf, Image, Font, Svg, Path } from '@react-pdf/renderer';
+import { Buffer } from 'buffer';
+
+Font.registerHyphenationCallback(word => [word]);
+import { doc, setDoc, deleteDoc, collection, getDocs } from 'firebase/firestore';
+import { db } from '../firebase';
+
+if (typeof window !== 'undefined') {
+  window.Buffer = Buffer;
+}
+
+const signatureImage = "/images/signature1.png";
+const companyLogo = "/images/LOGO c.png";
+
+// Constants
+const CURRENCY_SYMBOLS = {
+  'INR': '₹', 'USD': '$', 'EUR': '€', 'GBP': '£',
+  'AED': 'د.إ', 'SAR': '﷼', 'CAD': 'C$', 'AUD': 'A$'
+};
+
+const CURRENCY_SYMBOLS_PDF = {
+  'INR': 'Rs.', 'USD': '$', 'EUR': '€', 'GBP': '£',
+  'AED': 'AED', 'SAR': 'SAR', 'CAD': 'C$', 'AUD': 'A$'
+};
+
+const BANK_DETAILS = {
+  bankName: 'Karnataka Bank (Zirakpur)',
+  accountNumber: '0899202400002001',
+  accountName: 'Building India Digital',
+  ifscCode: 'KARB0000899'
+};
+
+const INITIAL_FORM_DATA = {
+  clientName: '', address: '', contactPerson: '', phone: '',
+  amount: '', baseCurrency: 'INR', displayCurrency: 'INR',
+  baseAmount: '', isRevised: false, revisionNumber: 0,
+  ...BANK_DETAILS
+};
+
+const INITIAL_QUOTATION_INFO = {
+  number: '', date: '', referenceNumber: 0
+};
+
+// PDF Styles
+const styles = StyleSheet.create({
+  page: {
+    flexDirection: 'column',
+    flex: 1,
+    height: '100%',
+    backgroundColor: '#FFFFFF',
+    padding: 11,
+    fontFamily: 'Helvetica',
+  },
+  header: {
+    fontSize: 14,
+    marginBottom: 8,
+    fontFamily: 'Helvetica-Bold',
+  },
+  text: {
+    fontSize: 10,
+    marginBottom: 3,
+    lineHeight: 1.3,
+  },
+  boldText: {
+    fontSize: 10,
+    marginBottom: 3,
+    fontFamily: 'Helvetica-Bold',
+  },
+  clientInfoText: {
+    fontSize: 10,
+    marginBottom: 3,
+    fontFamily: 'Helvetica-Bold',
+  },
+  sectionHeader: {
+    fontSize: 12,
+    marginBottom: 4,
+    fontFamily: 'Helvetica-Bold',
+    marginTop: 5,
+  },
+  table: {
+    display: 'flex',
+    flexDirection: 'column',
+    flex: 1,
+    minHeight: '100%',
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#000000',
+    borderStyle: 'solid',
+    width: '100%',
+    marginBottom: 0,
+    justifyContent: 'flex-start',
+  },
+  tableRow: {
+    flexDirection: 'row',
+    flex: 1,
+    minHeight: '100%',
+    alignItems: 'stretch',
+  },
+  tableColHeader: {
+    width: '20%',
+    borderRightWidth: 1,
+    borderColor: '#000000',
+    borderStyle: 'solid',
+    justifyContent: 'flex-start',
+  },
+  tableCol: {
+    width: '80%',
+    borderRightWidth: 1,
+    borderColor: '#000000',
+    borderStyle: 'solid',
+    justifyContent: 'flex-start',
+  },
+  tableCell: {
+    marginTop: 2,
+    marginBottom: 2,
+    fontSize: 11,
+    padding: 4,
+    textAlign: 'left',
+    lineHeight: 1.3,
+    fontFamily: 'Helvetica',
+  },
+  tableCellBold: {
+    marginTop: 4,
+    marginBottom: 4,
+    fontSize: 11,
+    padding: 6,
+    fontFamily: 'Helvetica-Bold',
+    textAlign: 'center',
+  },
+  amountSection: {
+    marginBottom: 0.5,
+    marginTop: 0.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: '#000000',
+    borderStyle: 'solid',
+    padding: 4,
+    backgroundColor: '#f9f9f9',
+  },
+  amountText: {
+    fontSize: 12,
+    marginBottom: 2,
+    fontFamily: 'Helvetica-Bold',
+  },
+  signatureSection: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 0,
+    minHeight: 50,
+  },
+  signatureBox: {
+    width: '48%',
+  },
+  signatureImage: {
+    width: 280,
+    height: 120,
+    objectFit: 'contain',
+    marginTop: -25,
+    marginLeft: -15,
+  },
+  signatureLabel: {
+    fontSize: 12,
+    fontFamily: 'Helvetica-Bold',
+    marginBottom: 1,
+  },
+  declarationText: {
+    fontSize: 9,
+    marginBottom: 4,
+    lineHeight: 1.3,
+    fontFamily: 'Helvetica-Bold',
+  },
+  declarationItem: {
+    fontSize: 9,
+    marginBottom: 2,
+    lineHeight: 1.3,
+    paddingLeft: 8,
+    fontFamily: 'Helvetica-Bold',
+  },
+  termsText: {
+    fontSize: 11,
+    marginBottom: 4,
+    lineHeight: 1.5,
+  },
+  termsBoldText: {
+    fontSize: 12,
+    marginBottom: 4,
+    lineHeight: 1.5,
+    fontFamily: 'Helvetica-Bold',
+    marginTop: 8,
+  },
+  paymentGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 8,
+  },
+  paymentItem: {
+    width: '50%',
+    marginBottom: 10,
+  },
+  paymentLabel: {
+    fontSize: 10,
+    fontFamily: 'Helvetica-Bold',
+    marginBottom: 4,
+  },
+  paymentValue: {
+    fontSize: 10,
+    fontFamily: 'Helvetica-Bold',
+  },
+  pageHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+    alignItems: 'center',
+  },
+  addressSection: {
+    flex: 1,
+  },
+  logoSection: {
+    width: 200,
+    height: 70,
+  },
+  termsSection: {
+    marginTop: 10,
+  },
+});
+
+// Helper function to strip HTML and preserve line breaks
+const stripHtmlAndPreserveBreaks = (html) => {
+  if (!html) return '';
+  let text = html.replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n')
+    .replace(/<\/div>/gi, '\n')
+    .replace(/<p>/gi, '')
+    .replace(/<div>/gi, '');
+  text = text.replace(/<[^>]*>/g, '');
+  text = text.replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&rsquo;/g, "'")
+  return text.trim();
+};
+
+const numberToWords = (num) => {
+  if (!num) return '';
+  const a = ['', 'One ', 'Two ', 'Three ', 'Four ', 'Five ', 'Six ', 'Seven ', 'Eight ', 'Nine ', 'Ten ', 'Eleven ', 'Twelve ', 'Thirteen ', 'Fourteen ', 'Fifteen ', 'Sixteen ', 'Seventeen ', 'Eighteen ', 'Nineteen '];
+  const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+  const inWords = (num) => {
+    if ((num = num.toString()).length > 9) return 'overflow';
+    let n = ('000000000' + num).substr(-9).match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/);
+    if (!n) return; let str = '';
+    str += (n[1] != 0) ? (a[Number(n[1])] || b[n[1][0]] + ' ' + a[n[1][1]]) + 'Crore ' : '';
+    str += (n[2] != 0) ? (a[Number(n[2])] || b[n[2][0]] + ' ' + a[n[2][1]]) + 'Lakh ' : '';
+    str += (n[3] != 0) ? (a[Number(n[3])] || b[n[3][0]] + ' ' + a[n[3][1]]) + 'Thousand ' : '';
+    str += (n[4] != 0) ? (a[Number(n[4])] || b[n[4][0]] + ' ' + a[n[4][1]]) + 'Hundred ' : '';
+    str += (n[5] != 0) ? ((str != '') ? 'and ' : '') + (a[Number(n[5])] || b[n[5][0]] + ' ' + a[n[5][1]]) + 'Only ' : '';
+    return str;
+  }
+
+  let cleanNum = String(num).replace(/,/g, '');
+  let parts = cleanNum.split('.');
+  let wholePart = parseInt(parts[0], 10);
+  if (isNaN(wholePart) || wholePart === 0) return 'Zero Only';
+  return inWords(wholePart).trim();
+};
+
+const formatAmountWithCommas = (amount) => {
+  if (!amount) return '';
+  const clean = String(amount).replace(/,/g, '');
+  const num = parseFloat(clean);
+  if (isNaN(num)) return amount;
+  return clean.includes('.')
+    ? num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : num.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+};
+
+const HtmlToPdf = ({ html, customStyle }) => {
+  if (!html) return null;
+  if (typeof window === 'undefined') return null; // Safe guard for Next.js SSR
+  const parser = new window.DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+  const fs = customStyle?.fontSize || 11;
+  const scaleRatio = fs / 11.0;
+  const pMarginBottom = fs < 11 ? (fs < 9.5 ? 1.0 : 1.5) : 4;
+  const liMarginBottom = fs < 11 ? (fs < 9.5 ? 0.5 : 1.0) : 2;
+
+  const processChildren = (childNodes, style) => {
+    return Array.from(childNodes).map((node, i) => {
+      const rendered = renderNode(node, i, style);
+      if (typeof rendered === 'string' || typeof rendered === 'number') {
+        return (
+          <Text key={`str-${i}`} style={{ ...customStyle, ...style, width: '100%', textAlign: style.textAlign || customStyle.textAlign || 'left' }}>
+            {rendered}
+          </Text>
+        );
+      }
+      return rendered;
+    }).filter(Boolean);
+  };
+
+  const renderNode = (node, index, inheritedStyle = {}) => {
+    if (node.nodeType === 3) {
+      const text = node.textContent;
+      if (!text.trim() && text.includes('\n')) return null;
+      return text.replace(/&nbsp;/g, '\u00A0');
+    }
+    if (node.nodeType === 1) {
+      const tag = node.tagName.toLowerCase();
+      let style = { ...inheritedStyle };
+
+      // Parse inline styles from TinyMCE style attribute string (highly reliable)
+      const styleAttr = node.getAttribute && node.getAttribute('style');
+      if (styleAttr) {
+        const stylesList = styleAttr.split(';');
+        stylesList.forEach(item => {
+          const parts = item.split(':');
+          if (parts.length === 2) {
+            const key = parts[0].trim().toLowerCase();
+            const val = parts[1].trim();
+            if (key === 'text-align') {
+              style.textAlign = val;
+            } else if (key === 'font-size') {
+              let numSize = parseFloat(val);
+              if (!isNaN(numSize)) {
+                if (val.endsWith('em') || val.endsWith('rem')) {
+                  numSize = numSize * 11;
+                }
+                style.fontSize = numSize * scaleRatio;
+              }
+            } else if (key === 'color') {
+              style.color = val;
+            } else if (key === 'background-color') {
+              style.backgroundColor = val;
+            } else if (key === 'text-decoration') {
+              if (val.includes('underline')) style.textDecoration = 'underline';
+              if (val.includes('line-through')) style.textDecoration = 'line-through';
+            } else if (key === 'font-weight') {
+              if (val === 'bold' || parseInt(val) >= 700) {
+                style.fontFamily = 'Helvetica-Bold';
+              }
+            } else if (key === 'font-style') {
+              if (val === 'italic') {
+                style.fontFamily = style.fontFamily === 'Helvetica-Bold' ? 'Helvetica-BoldOblique' : 'Helvetica-Oblique';
+              }
+            }
+          }
+        });
+      }
+
+      // Fallback: check DOM style object properties (in case they are populated)
+      if (node.style) {
+        if (node.style.textAlign && !style.textAlign) style.textAlign = node.style.textAlign;
+        if (node.style.color && !style.color) style.color = node.style.color;
+        if (node.style.backgroundColor && !style.backgroundColor) style.backgroundColor = node.style.backgroundColor;
+        if (node.style.fontSize && !style.fontSize) {
+          const fsVal = node.style.fontSize.trim();
+          let numSize = parseFloat(fsVal);
+          if (!isNaN(numSize)) {
+            if (fsVal.endsWith('em') || fsVal.endsWith('rem')) numSize = numSize * 11;
+            style.fontSize = numSize * scaleRatio;
+          }
+        }
+      }
+
+      if (node.getAttribute && node.getAttribute('align')) {
+        style.textAlign = node.getAttribute('align');
+      }
+
+      if (tag === 'strong' || tag === 'b') style.fontFamily = 'Helvetica-Bold';
+      if (tag === 'em' || tag === 'i') style.fontFamily = 'Helvetica-Oblique';
+      if (tag === 'u') style.textDecoration = 'underline';
+
+      if (['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(tag)) {
+        const children = Array.from(node.childNodes).map((child, i) => renderNode(child, i, style));
+        return (
+          <View key={index} style={{ marginBottom: pMarginBottom, width: '100%', alignItems: 'stretch' }}>
+            <Text style={{ ...customStyle, ...style, width: '100%', textAlign: style.textAlign || customStyle.textAlign || 'left' }}>{children}</Text>
+          </View>
+        );
+      }
+
+      if (tag === 'div') {
+        return (
+          <View key={index} style={{ marginBottom: pMarginBottom, width: '100%', alignItems: 'stretch' }}>
+            {processChildren(node.childNodes, style)}
+          </View>
+        );
+      }
+
+      if (tag === 'ul' || tag === 'ol') {
+        let liIndex = 0;
+        return (
+          <View key={index} style={{ marginBottom: pMarginBottom, paddingLeft: 10, width: '100%' }}>
+            {Array.from(node.childNodes).map((child, i) => {
+              if (child.nodeType === 1 && child.tagName.toLowerCase() === 'li') {
+                liIndex++;
+                let liStyle = { ...style };
+                const childStyleAttr = child.getAttribute && child.getAttribute('style');
+                if (childStyleAttr) {
+                  const stylesList = childStyleAttr.split(';');
+                  stylesList.forEach(sItem => {
+                    const parts = sItem.split(':');
+                    if (parts.length === 2) {
+                      const key = parts[0].trim().toLowerCase();
+                      const val = parts[1].trim();
+                      if (key === 'text-align') {
+                        if (val.includes('center')) liStyle.textAlign = 'center';
+                        else if (val.includes('right')) liStyle.textAlign = 'right';
+                        else if (val.includes('justify')) liStyle.textAlign = 'justify';
+                        else if (val.includes('left')) liStyle.textAlign = 'left';
+                      }
+                    }
+                  });
+                }
+                const textAlign = liStyle.textAlign || 'left';
+                return (
+                  <View key={`li-${i}`} style={{
+                    flexDirection: 'row',
+                    marginBottom: liMarginBottom,
+                    width: '100%',
+                    justifyContent: textAlign === 'center' ? 'center' : textAlign === 'right' ? 'flex-end' : 'flex-start',
+                    alignItems: 'center'
+                  }}>
+                    <Text style={{ ...customStyle, ...liStyle, width: 'auto', marginRight: 6 }}>{tag === 'ol' ? `${liIndex}.` : '•'}</Text>
+                    <View style={{ flex: textAlign === 'left' || textAlign === 'justify' ? 1 : 0 }}>
+                      {processChildren(child.childNodes, liStyle)}
+                    </View>
+                  </View>
+                );
+              }
+              const rendered = renderNode(child, i, style);
+              if (typeof rendered === 'string' || typeof rendered === 'number') {
+                if (!String(rendered).trim()) return null;
+                return (
+                  <Text key={`str-${i}`} style={{ ...customStyle, ...style, width: '100%', textAlign: style.textAlign || customStyle.textAlign || 'left' }}>
+                    {rendered}
+                  </Text>
+                );
+              }
+              return rendered;
+            }).filter(Boolean)}
+          </View>
+        );
+      }
+
+      if (tag === 'li') {
+        let liStyle = { ...style };
+        const styleAttr = node.getAttribute && node.getAttribute('style');
+        if (styleAttr) {
+          const stylesList = styleAttr.split(';');
+          stylesList.forEach(sItem => {
+            const parts = sItem.split(':');
+            if (parts.length === 2) {
+              const key = parts[0].trim().toLowerCase();
+              const val = parts[1].trim();
+              if (key === 'text-align') {
+                if (val.includes('center')) liStyle.textAlign = 'center';
+                else if (val.includes('right')) liStyle.textAlign = 'right';
+                else if (val.includes('justify')) liStyle.textAlign = 'justify';
+                else if (val.includes('left')) liStyle.textAlign = 'left';
+              }
+            }
+          });
+        }
+        const textAlign = liStyle.textAlign || 'left';
+        return (
+          <View key={index} style={{
+            flexDirection: 'row',
+            marginBottom: liMarginBottom,
+            width: '100%',
+            justifyContent: textAlign === 'center' ? 'center' : textAlign === 'right' ? 'flex-end' : 'flex-start',
+            alignItems: 'center'
+          }}>
+            <Text style={{ ...customStyle, ...liStyle, width: 'auto', marginRight: 6 }}>{'•'}</Text>
+            <View style={{ flex: textAlign === 'left' || textAlign === 'justify' ? 1 : 0 }}>
+              {processChildren(node.childNodes, liStyle)}
+            </View>
+          </View>
+        );
+      }
+
+      if (tag === 'br') {
+        return '\n';
+      }
+
+      const children = Array.from(node.childNodes).map((child, i) => renderNode(child, i, style));
+      return <Text key={index} style={{ ...customStyle, ...style, textAlign: style.textAlign || customStyle.textAlign || 'left' }}>{children}</Text>;
+    }
+    return null;
+  };
+
+  return (
+    <View style={{ padding: 2, width: '100%', flex: 1, justifyContent: 'flex-start' }}>
+      {processChildren(doc.body.childNodes, {})}
+    </View>
+  );
+};
+
+// PDF Document Component
+const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
+  // Helper to count characters of only visible text (ignoring HTML tag overhead)
+  const getVisibleTextLength = (html) => {
+    if (!html) return 0;
+    const clean = html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/\u00A0/g, ' ');
+    return clean.length;
+  };
+
+  const getDynamicFontSize = (chars) => {
+    if (chars > 2200) return 9.0;
+    if (chars > 1500) return 10.2;
+    if (chars > 1000) return 10.5;
+    return 11.0;
+  };
+
+  return (
+    <Document>
+      {subscriptionItems.map((item, rIndex) => {
+        const isLastItem = rIndex === subscriptionItems.length - 1;
+
+        // Calculate font size per page/item
+        const itemChars = getVisibleTextLength(item.serialNumber) + getVisibleTextLength(item.subscription);
+        const dynamicFontSize = getDynamicFontSize(itemChars);
+        const dynamicLineHeight = dynamicFontSize === 11.0 ? 1.3 : 1.22;
+
+        const cellStyle = {
+          ...styles.tableCell,
+          fontSize: dynamicFontSize,
+          lineHeight: dynamicLineHeight
+        };
+        const cellStyleBold = {
+          ...styles.tableCellBold,
+          fontSize: dynamicFontSize
+        };
+
+        // Calculate the minimum height for the table depending on the page type to stretch it correctly
+        const getTableHeight = () => {
+          if (rIndex === 0) {
+            return 630; // Page 1 has client header, stretches to bottom
+          } else {
+            return 800; // All other pages stretch to bottom
+          }
+        };
+        const tableHeight = getTableHeight();
+
+        return (
+          <Page key={`page-${rIndex}`} size="A4" style={styles.page}>
+            {rIndex === 0 && (
+              <>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4, marginTop: 10 }}>
+                  {/* Address Section */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', width: 285 }}>
+                    <Svg viewBox="0 0 24 24" style={{ width: 15, height: 15, marginRight: 6 }}>
+                      <Path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="#000000" />
+                    </Svg>
+                    <View>
+                      <Text style={{ fontSize: 10.0, fontFamily: 'Helvetica-Bold', lineHeight: 1.15 }}>#246, Devaji vip Plaza, VIP Road</Text>
+                      <Text style={{ fontSize: 10.0, fontFamily: 'Helvetica-Bold', lineHeight: 1.15 }}>Zirakpur, Punjab Pin : 140603</Text>
+                    </View>
+                  </View>
+                  {/* Logo Right Section */}
+                  <View style={{ width: 270, height: 75 }}>
+                    <Image src={companyLogo} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                  </View>
+                </View>
+
+                {/* Phone Bar Below */}
+                <View style={{ backgroundColor: '#000000', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: 18, width: 285, marginBottom: 4 }}>
+                  <Svg viewBox="0 0 24 24" style={{ width: 10, height: 10, marginRight: 4 }}>
+                    <Path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" fill="#ffffff" />
+                  </Svg>
+                  <Text style={{ color: '#ffffff', fontSize: 9.5, fontFamily: 'Helvetica-Bold' }}>90414-99964/73</Text>
+                </View>
+
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 3, marginBottom: 4 }}>
+                  <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold' }}>No. <Text style={{ fontFamily: 'Helvetica-Bold' }}>{quotationInfo.number}</Text></Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold' }}>Dated </Text>
+                    <View style={{ borderBottomWidth: 1, borderColor: '#000000', width: 120, alignItems: 'center', marginLeft: 4 }}>
+                      <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', marginBottom: 2 }}>{quotationInfo.date}</Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Client Info Section */}
+                <View style={{ marginBottom: 4 }}>
+                  {/* Business Name Row */}
+                  <View style={{ flexDirection: 'row', alignItems: 'flex-end', marginBottom: 2 }}>
+                    <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', width: 90 }}>Business Name</Text>
+                    <View style={{ borderBottomWidth: 1, borderColor: '#000000', flex: 1, paddingBottom: 2 }}>
+                      <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold' }}>{formData.clientName}</Text>
+                    </View>
+                  </View>
+
+                  {/* Address Row */}
+                  <View style={{ flexDirection: 'row', alignItems: 'flex-end', marginBottom: 2 }}>
+                    <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', width: 90 }}>Address</Text>
+                    <View style={{ borderBottomWidth: 1, borderColor: '#000000', flex: 1, paddingBottom: 2 }}>
+                      <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold' }}>{formData.address}</Text>
+                    </View>
+                  </View>
+
+                  {/* Contact & Phone Row */}
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-end', width: '48%' }}>
+                      <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', width: 90 }}>Contact Person</Text>
+                      <View style={{ borderBottomWidth: 1, borderColor: '#000000', flex: 1, paddingBottom: 2 }}>
+                        <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold' }}>{formData.contactPerson}</Text>
+                      </View>
+                    </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-end', width: '48%' }}>
+                      <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', width: 90 }}>Phone/Mobile</Text>
+                      <View style={{ borderBottomWidth: 1, borderColor: '#000000', flex: 1, paddingBottom: 2 }}>
+                        <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold' }}>{formData.phone}</Text>
+                      </View>
+                    </View>
+                  </View>
+                </View>
+              </>
+            )}
+
+            <View style={[styles.table, { minHeight: tableHeight }]}>
+              <View style={[styles.tableRow, { minHeight: tableHeight }]}>
+                {/* Left Column (S.No) */}
+                <View style={styles.tableColHeader}>
+                  {/* Header */}
+                  <View style={{ backgroundColor: '#f0f0f0', borderBottomWidth: 1, borderColor: '#000000', borderStyle: 'solid', height: 30, justifyContent: 'center', alignItems: 'center' }}>
+                    <Text style={[cellStyleBold, { textAlign: 'center', padding: 0, margin: 0 }]}>S.No</Text>
+                  </View>
+                  {/* Content */}
+                  <HtmlToPdf
+                    html={item.serialNumber}
+                    customStyle={{ ...cellStyle, fontFamily: 'Helvetica-Bold', padding: 0, margin: 0, textAlign: 'center' }}
+                  />
+                </View>
+
+                {/* Right Column (SUBSCRIPTION) */}
+                <View style={styles.tableCol}>
+                  {/* Header */}
+                  <View style={{ backgroundColor: '#f0f0f0', borderBottomWidth: 1, borderColor: '#000000', borderStyle: 'solid', height: 30, justifyContent: 'center', alignItems: 'center' }}>
+                    <Text style={[cellStyleBold, { textAlign: 'center', padding: 0, margin: 0 }]}>SUBSCRIPTION</Text>
+                  </View>
+                  {/* Content */}
+                  <HtmlToPdf
+                    html={item.subscription}
+                    customStyle={{ ...cellStyle, fontFamily: 'Helvetica', padding: 0, margin: 0 }}
+                  />
+                </View>
+              </View>
+            </View>
+
+            {isLastItem && (
+              <View style={{ marginTop: 20 }} wrap={false}>
+                <View style={styles.amountSection}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+                    <Text style={[styles.amountText, { fontSize: 14 }]}>AMOUNT</Text>
+                    <Text style={[styles.amountText, { fontSize: 14 }]}>
+                      {formData.displayCurrency} ({CURRENCY_SYMBOLS_PDF[formData.displayCurrency]})
+                    </Text>
+                    {formData.amount && <Text style={[styles.amountText, { fontSize: 14, color: '#FF8C00', fontFamily: 'Helvetica-Bold' }]}>
+                      {formatAmountWithCommas(formData.amount)}
+                    </Text>}
+                  </View>
+                  {formData.amount && <Text style={[styles.text, { textAlign: 'center', marginTop: 4, fontFamily: 'Helvetica-Bold', fontSize: 11 }]}>
+                    Amount in words: {numberToWords(formData.amount)}
+                  </Text>}
+                  <Text style={[styles.text, { textAlign: 'center', marginTop: 4, fontFamily: 'Helvetica-Bold', marginBottom: 2 }]}>(GST EXTRA)</Text>
+                </View>
+                <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 11, textAlign: 'center', marginTop: 5, color: '#FF0000', marginBottom: 5 }}>
+                  * Cheques should be drawn in favour of Devine sTudio
+                </Text>
+
+                <View style={{ marginBottom: 15, marginTop: 15 }}>
+                  <Text style={[styles.sectionHeader, { marginTop: 0, marginBottom: 4 }]}>PAYMENT DETAILS</Text>
+                  <View style={styles.paymentGrid}>
+                    <View style={styles.paymentItem}>
+                      <Text style={styles.paymentLabel}>Bank Name</Text>
+                      <Text style={styles.paymentValue}>{formData.bankName}</Text>
+                    </View>
+                    <View style={styles.paymentItem}>
+                      <Text style={styles.paymentLabel}>Account Number</Text>
+                      <Text style={styles.paymentValue}>{formData.accountNumber}</Text>
+                    </View>
+                    <View style={styles.paymentItem}>
+                      <Text style={styles.paymentLabel}>Account Name</Text>
+                      <Text style={styles.paymentValue}>{formData.accountName}</Text>
+                    </View>
+                    <View style={styles.paymentItem}>
+                      <Text style={styles.paymentLabel}>IFSC Code</Text>
+                      <Text style={styles.paymentValue}>{formData.ifscCode}</Text>
+                    </View>
+                  </View>
+                </View>
+
+                <View style={{ marginBottom: 15, marginTop: 15 }}>
+                  <Text style={[styles.sectionHeader, { marginTop: 0, marginBottom: 4 }]}>DECLARATION</Text>
+                  <Text style={[styles.declarationText, { marginBottom: 4 }]}>
+                    This is an application for Promotional services to BUILDING INDIA DIGITAL.
+                  </Text>
+                  {[
+                    "All information including text & picture to be provided by the client.",
+                    "BUILDING INDIA DIGITAL shall not be liable for any claims/damages.",
+                    "Work shall commence only after clearance of cheques/pay order.",
+                    "We are not responsible for future changes if business page already made by client.",
+                    "BUILDING INDIA DIGITAL will take 60 days to complete the services/work.",
+                    "After work starts there will be No Claim & No Refund.",
+                    "Payment covered under 'Advertising Contract' u/s 194C. TDS @2% if applicable.",
+                    "I allow BUILDING INDIA DIGITAL to make commercial calls to my mobile number(s).",
+                    "This declaration holds valid even if numbers registered for NDNC."
+                  ].map((item, index) => (
+                    <Text key={index} style={styles.declarationItem}>• {item}</Text>
+                  ))}
+                </View>
+
+                <View style={[styles.signatureSection, { marginTop: 40, minHeight: 50 }]}>
+                  <View style={styles.signatureBox}>
+                    <Text style={styles.signatureLabel}>CLIENT SIGNATURE</Text>
+                    <View style={{ height: 20, justifyContent: 'flex-end', alignItems: 'flex-start', marginTop: 0 }}>
+                      <Text style={styles.text}></Text>
+                    </View>
+                  </View>
+                  <View style={styles.signatureBox}>
+                    <Text style={styles.signatureLabel}>ORGANISATION SIGNATURE</Text>
+                    <View style={{ marginTop: -12, alignItems: 'flex-start' }}>
+                      <Image src={signatureImage} style={styles.signatureImage} />
+                    </View>
+                  </View>
+                </View>
+              </View>
+            )}
+          </Page>
+        );
+      })}
+
+      <Page size="A4" style={styles.page}>
+        <View style={{ flex: 1, justifyContent: 'flex-start' }}>
+          <Text style={[styles.header, { textAlign: 'center', marginBottom: 15, fontSize: 16 }]}>TERMS & CONDITIONS OF SERVICES</Text>
+
+          <View style={styles.termsSection}>
+            <Text style={styles.termsBoldText}>1. GENERAL</Text>
+            <Text style={styles.termsText}>1.1 The terms & conditions herein shall constitute an entire Agreement between BUILDING INDIA DIGITAL and Customer. 1.2 Any invalid clause shall be deemed severable and not affect remaining clauses.</Text>
+
+            <Text style={[styles.termsBoldText, { marginTop: 8 }]}>2. SERVICES, EXCLUSIONS & PERFORMANCE</Text>
+            <Text style={styles.termsText}>2.1 If requirements fall within restricted categories of Facebook/YouTube, BUILDING INDIA DIGITAL shall not be liable. 2.2 BUILDING INDIA DIGITAL reserves right to refuse/cancel any requirement. Budget will not be refunded. 2.3 Not responsible for delay due to Act of God, war, riot, strike, fire, flood, or any cause beyond control.</Text>
+
+            <Text style={[styles.termsBoldText, { marginTop: 8 }]}>3. PAYMENT TERMS</Text>
+            <Text style={styles.termsText}>3.1 Customer shall pay fees as specified in quotation/invoice. 3.2 All payments in advance unless agreed in writing. 3.3 Late payments attract 2% monthly interest.</Text>
+
+            <Text style={[styles.termsBoldText, { marginTop: 8 }]}>4. INTELLECTUAL PROPERTY</Text>
+            <Text style={styles.termsText}>4.1 All IP rights in deliverables remain with BUILDING INDIA DIGITAL. 4.2 Customer warrants materials don't infringe third-party IP rights.</Text>
+
+            <Text style={[styles.termsBoldText, { marginTop: 8 }]}>5. CONFIDENTIALITY</Text>
+            <Text style={styles.termsText}>5.1 Both parties agree to keep confidential all marked information. 5.2 Obligation survives termination.</Text>
+
+            <Text style={[styles.termsBoldText, { marginTop: 8 }]}>6. LIMITATION OF LIABILITY</Text>
+            <Text style={styles.termsText}>6.1 Total liability shall not exceed total fees paid. 6.2 Not liable for indirect, special, or consequential damages.</Text>
+
+            <Text style={[styles.termsBoldText, { marginTop: 8 }]}>7. TERMINATION</Text>
+            <Text style={styles.termsText}>7.1 Either party may terminate with 30 days notice. 7.2 May terminate immediately if Customer breaches material term.</Text>
+
+            <Text style={[styles.termsBoldText, { marginTop: 8 }]}>8. GOVERNING LAW</Text>
+            <Text style={styles.termsText}>8.1 Governed by laws of India. 8.2 Disputes subject to courts in Zirakpur, Punjab.</Text>
+
+            <Text style={[styles.termsBoldText, { marginTop: 8 }]}>9. FORCE MAJEURE</Text>
+            <Text style={styles.termsText}>9.1 Neither party liable for failure due to circumstances beyond control.</Text>
+
+            <Text style={[styles.termsBoldText, { marginTop: 8 }]}>10. ENTIRE AGREEMENT</Text>
+            <Text style={styles.termsText}>10.1 This constitutes entire understanding and supersedes all prior agreements.</Text>
+
+            <Text style={[styles.termsBoldText, { marginTop: 8 }]}>11. PACKAGE VALIDITY</Text>
+            <Text style={styles.termsBoldText}>11.1 ABOVE PACKAGE IS FOR 1 ID ONLY</Text>
+          </View>
+        </View>
+      </Page>
+    </Document>
+  );
+};
+
+// TinyMCE Editor Component  
+const TinyMCEEditor = ({ content, onClose, onSave }) => {
+  const editorRef = useRef(null);
+
+  const handleSave = () => {
+    if (editorRef.current) {
+      const editorContent = editorRef.current.getContent();
+      onSave(editorContent);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-auto">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-semibold">Rich Text Editor</h3>
+          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
+            <X size={24} />
+          </button>
+        </div>
+        <Editor
+          apiKey="g1kgvpz3sdqd2dq5uhk0i206p7ejh2ttx7drt78gh6tzah7g"
+          onInit={(evt, editor) => editorRef.current = editor}
+          initialValue={content}
+          init={{
+            height: 400,
+            menubar: true,
+            plugins: ['advlist', 'autolink', 'lists', 'link', 'image', 'charmap', 'preview', 'anchor', 'searchreplace', 'visualblocks', 'code', 'fullscreen', 'insertdatetime', 'media', 'table', 'code', 'help', 'wordcount'],
+            toolbar: 'undo redo | blocks | bold italic underline strikethrough | alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | forecolor backcolor | fontfamily fontsize | link image media | removeformat | help',
+            content_style: 'body { font-family:Arial,sans-serif; font-size:14px }'
+          }}
+        />
+        <div className="flex justify-end gap-2 mt-4">
+          <button onClick={onClose} className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600">
+            Cancel
+          </button>
+          <button onClick={handleSave} className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
+            Apply Changes
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Calendar Component
+const CalendarComponent = ({ onDateSelect }) => {
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState(null);
+
+  const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
+  const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay();
+
+  const days = [];
+  for (let i = 0; i < firstDay; i++) days.push(<div key={`empty-${i}`} className="w-8 h-8" />);
+  for (let day = 1; day <= daysInMonth; day++) {
+    const isSelected = selectedDate?.getDate() === day && selectedDate?.getMonth() === currentDate.getMonth();
+    const isToday = new Date().getDate() === day && new Date().getMonth() === currentDate.getMonth();
+
+    days.push(
+      <button
+        key={day}
+        onClick={() => {
+          const newDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
+          setSelectedDate(newDate);
+          onDateSelect(newDate);
+        }}
+        className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${isSelected ? 'bg-blue-500 text-white' : isToday ? 'border border-blue-500 bg-blue-100 text-blue-500' : 'hover:bg-gray-100'
+          }`}
+      >
+        {day}
+      </button>
+    );
+  }
+
+  const changeMonth = (inc) => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + inc, 1));
+  const changeYear = (inc) => setCurrentDate(new Date(currentDate.getFullYear() + inc, currentDate.getMonth(), 1));
+
+  return (
+    <div className="bg-white border border-gray-300 rounded-lg shadow-lg p-4 w-64">
+      <div className="flex justify-between items-center mb-4">
+        <div className="flex gap-1">
+          <button onClick={() => changeYear(-1)} className="p-1 hover:bg-gray-100 rounded">‹‹</button>
+          <button onClick={() => changeMonth(-1)} className="p-1 hover:bg-gray-100 rounded">‹</button>
+        </div>
+        <div className="font-medium text-sm">
+          {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+        </div>
+        <div className="flex gap-1">
+          <button onClick={() => changeMonth(1)} className="p-1 hover:bg-gray-100 rounded">›</button>
+          <button onClick={() => changeYear(1)} className="p-1 hover:bg-gray-100 rounded">››</button>
+        </div>
+      </div>
+      <div className="grid grid-cols-7 gap-1 text-center text-xs text-gray-500 mb-2">
+        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(d => <div key={d}>{d}</div>)}
+      </div>
+      <div className="grid grid-cols-7 gap-1">
+        {days}
+      </div>
+      <div className="mt-4">
+        <button
+          onClick={() => {
+            const today = new Date();
+            setCurrentDate(new Date(today.getFullYear(), today.getMonth(), 1));
+            setSelectedDate(today);
+            onDateSelect(today);
+          }}
+          className="w-full py-2 bg-gray-100 hover:bg-gray-200 rounded text-sm"
+        >
+          Today
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// Custom Hooks
+const useExchangeRates = () => {
+  const [rates] = useState({ INR: 1, USD: 0.012, EUR: 0.011, GBP: 0.0095, AED: 0.044, SAR: 0.045, CAD: 0.017, AUD: 0.019 });
+  return rates;
+};
+
+const useClickOutside = (ref, callback) => {
+  useEffect(() => {
+    const handleClick = (event) => {
+      if (ref.current && !ref.current.contains(event.target)) callback();
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [ref, callback]);
+};
+
+// FormField Component
+const FormField = ({ label, value, onChange, type = 'text', rows = 1 }) => (
+  <div className="mb-4">
+    <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+    {type === 'textarea' ? (
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        rows={rows}
+        className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+    ) : (
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+    )}
+  </div>
+);
+
+// Main QuotationForm Component
+const QuotationForm = () => {
+  const [subscriptionItems, setSubscriptionItems] = useState([{ id: 1, serialNumber: '', subscription: '' }]);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [showTextEditor, setShowTextEditor] = useState({ id: null, field: null });
+  const [savedQuotations, setSavedQuotations] = useState([]);
+  const [showSavedQuotations, setShowSavedQuotations] = useState(false);
+  const [currentQuotationId, setCurrentQuotationId] = useState(null);
+  const [editorContent, setEditorContent] = useState('');
+  const [formData, setFormData] = useState(INITIAL_FORM_DATA);
+  const [quotationInfo, setQuotationInfo] = useState(INITIAL_QUOTATION_INFO);
+  const [activeTab, setActiveTab] = useState('editor');
+  const [openFolders, setOpenFolders] = useState({});
+  const [isSpeedDialOpen, setIsSpeedDialOpen] = useState(false);
+
+  const groupedQuotations = React.useMemo(() => {
+    const groupsMap = {};
+    const sorted = [...savedQuotations].sort((a, b) => new Date(b.savedAt || 0) - new Date(a.savedAt || 0));
+
+    sorted.forEach(quot => {
+      const date = new Date(quot.savedAt || Date.now());
+      const monthYear = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      const groupKey = `${date.getFullYear()}-${String(date.getMonth()).padStart(2, '0')}`;
+
+      if (!groupsMap[groupKey]) {
+        groupsMap[groupKey] = { label: monthYear, quotations: [] };
+      }
+      groupsMap[groupKey].quotations.push(quot);
+    });
+
+    return Object.keys(groupsMap).sort().reverse().map(key => groupsMap[key]);
+  }, [savedQuotations]);
+
+  const toggleFolder = (label) => {
+    setOpenFolders(prev => ({ ...prev, [label]: !prev[label] }));
+  };
+
+  const editorRef = useRef(null);
+  const calendarRef = useRef(null);
+  const exchangeRates = useExchangeRates();
+  useClickOutside(calendarRef, () => setShowDatePicker(false));
+
+  const convertAmount = (amount, fromCurrency, toCurrency) => {
+    if (!amount || !exchangeRates[fromCurrency] || !exchangeRates[toCurrency]) return '';
+    const numAmount = parseFloat(amount.replace(/,/g, ''));
+    if (isNaN(numAmount)) return '';
+    const inINR = numAmount / exchangeRates[fromCurrency];
+    return (inINR * exchangeRates[toCurrency]).toFixed(2);
+  };
+
+  const formatNumber = (num) => num ? parseFloat(num).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
+
+  const generateQuotationInfo = (selectedDate = new Date()) => {
+    const date = selectedDate;
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+
+    const referenceNumber = quotationInfo.referenceNumber || 0;
+    const baseNumber = `${year}${month}${day}`;
+    const revisionSuffix = formData.isRevised ? `/${formData.revisionId || 'R' + formData.revisionNumber}` : '';
+
+    setQuotationInfo({
+      number: `${baseNumber}/${referenceNumber}${revisionSuffix}`,
+      date: date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '-'),
+      referenceNumber
+    });
+  };
+
+  const downloadPDF = async () => {
+    try {
+      const blob = await pdf(<QuotationPDF
+        formData={formData}
+        quotationInfo={quotationInfo}
+        subscriptionItems={subscriptionItems}
+      />).toBlob();
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `quotation-${quotationInfo.number.replace(/\//g, '-')}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('Error generating PDF. Please try again.');
+    }
+  };
+
+  useEffect(() => { generateQuotationInfo(); }, []);
+  useEffect(() => { generateQuotationInfo(); }, [formData.isRevised, formData.revisionNumber]);
+
+  useEffect(() => {
+    const fetchQuotations = async () => {
+      try {
+        const querySnapshot = await getDocs(collection(db, "quotations"));
+        const quots = [];
+        querySnapshot.forEach((doc) => {
+          quots.push(doc.data());
+        });
+        setSavedQuotations(quots);
+      } catch (error) {
+        console.error("Error fetching quotations from Firestore:", error);
+      }
+    };
+    fetchQuotations();
+  }, []);
+
+  const downloadSavedPDF = (pdfBase64, filename) => {
+    try {
+      const binaryString = window.atob(pdfBase64);
+      const len = binaryString.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      const blob = new Blob([bytes], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading saved PDF:', error);
+      alert('Error downloading saved PDF: ' + error.message);
+    }
+  };
+
+  const addSubscriptionItem = () => {
+    const newId = Math.max(...subscriptionItems.map(item => item.id), 0) + 1;
+    setSubscriptionItems([...subscriptionItems, { id: newId, serialNumber: '', subscription: '' }]);
+  };
+
+  const removeSubscriptionItem = (id) => {
+    if (subscriptionItems.length > 1) setSubscriptionItems(subscriptionItems.filter(item => item.id !== id));
+  };
+
+  const updateSubscriptionItem = (id, field, value) => {
+    setSubscriptionItems(subscriptionItems.map(item => item.id === id ? { ...item, [field]: value } : item));
+  };
+
+  const handleFormChange = (field, value) => setFormData(prev => ({ ...prev, [field]: value }));
+
+  const handleCurrencyChange = (newCurrency) => {
+    setFormData(prev => ({
+      ...prev,
+      displayCurrency: newCurrency,
+      ...(prev.baseAmount && { amount: formatNumber(convertAmount(prev.baseAmount, prev.baseCurrency, newCurrency)) })
+    }));
+  };
+
+  const handleAmountChange = (value) => {
+    const cleanValue = value.replace(/,/g, '');
+    setFormData(prev => ({ ...prev, amount: value, baseAmount: cleanValue, baseCurrency: prev.displayCurrency }));
+  };
+
+  const saveQuotation = async () => {
+    try {
+      // Generate PDF blob
+      const blob = await pdf(<QuotationPDF
+        formData={formData}
+        quotationInfo={quotationInfo}
+        subscriptionItems={subscriptionItems}
+      />).toBlob();
+
+      // Convert blob to base64
+      const reader = new FileReader();
+      const base64Promise = new Promise((resolve, reject) => {
+        reader.onloadend = () => {
+          const base64data = reader.result.split(',')[1];
+          resolve(base64data);
+        };
+        reader.onerror = reject;
+      });
+      reader.readAsDataURL(blob);
+      const pdfBase64 = await base64Promise;
+
+      const quotationData = {
+        id: currentQuotationId || Date.now(),
+        formData: { ...formData },
+        subscriptionItems: [...subscriptionItems],
+        quotationInfo: { ...quotationInfo },
+        savedAt: new Date().toISOString(),
+        baseQuotationNumber: quotationInfo.number.split('/RevBiD')[0].split('/R')[0],
+        pdfBase64: pdfBase64
+      };
+
+      // Save to Firebase Firestore Database
+      const docRef = doc(db, "quotations", quotationData.id.toString());
+      await setDoc(docRef, quotationData);
+
+      setSavedQuotations(prev => currentQuotationId ? prev.map(q => q.id === currentQuotationId ? quotationData : q) : [...prev, quotationData]);
+      setCurrentQuotationId(quotationData.id);
+      alert('Quotation saved successfully to the database!');
+    } catch (error) {
+      console.error('Error saving to database:', error);
+      alert('Error saving quotation: ' + error.message);
+    }
+  };
+
+  const loadQuotation = (quotation) => {
+    setFormData(quotation.formData);
+    setSubscriptionItems(quotation.subscriptionItems);
+    setQuotationInfo(quotation.quotationInfo);
+    setCurrentQuotationId(quotation.id);
+    setShowSavedQuotations(false);
+  };
+
+  const markAsRevised = () => {
+    if (!currentQuotationId) return alert('Please save the quotation first!');
+
+    const baseQuotation = savedQuotations.find(q => q.id === currentQuotationId);
+    if (!baseQuotation) return alert('Original quotation not found!');
+
+    const baseNumber = baseQuotation.baseQuotationNumber;
+    const relatedQuotations = savedQuotations.filter(q => q.baseQuotationNumber === baseNumber);
+    const nextRevision = Math.max(0, ...relatedQuotations.map(q => q.formData.revisionNumber || 0)) + 1;
+
+    const date = new Date();
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const randomAlphaNumeric = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const newRevisionId = `RevBiD${year}${month}${randomAlphaNumeric}`;
+
+    setFormData(prev => ({ ...prev, isRevised: true, revisionNumber: nextRevision, revisionId: newRevisionId }));
+    setCurrentQuotationId(null);
+    alert(`Quotation marked as Revision ${nextRevision} (${newRevisionId}). Please make changes and save.`);
+  };
+
+  const generateNewQuotation = () => {
+    setQuotationInfo(prev => ({ ...prev, referenceNumber: (prev.referenceNumber || 0) + 1 }));
+    setFormData(INITIAL_FORM_DATA);
+    setSubscriptionItems([{ id: 1, serialNumber: '', subscription: '' }]);
+    setCurrentQuotationId(null);
+    setIsEditing(false);
+  };
+
+  const handleDateSelect = (date) => {
+    generateQuotationInfo(date);
+    setShowDatePicker(false);
+  };
+
+  const toggleEditMode = () => {
+    setIsEditing(!isEditing);
+    if (isEditing) setShowTextEditor({ id: null, field: null });
+  };
+
+  const openTextEditor = (id, field) => {
+    if (!isEditing) return;
+    const item = subscriptionItems.find(i => i.id === id);
+    if (item) {
+      setEditorContent(item[field] || '');
+      setShowTextEditor({ id, field });
+    }
+  };
+
+  const closeTextEditor = () => {
+    setShowTextEditor({ id: null, field: null });
+  };
+
+  const deleteQuotation = async (id) => {
+    if (window.confirm('Are you sure you want to delete this quotation?')) {
+      try {
+        const docRef = doc(db, "quotations", id.toString());
+        await deleteDoc(docRef);
+        setSavedQuotations(prev => prev.filter(q => q.id !== id));
+        if (currentQuotationId === id) setCurrentQuotationId(null);
+        alert('Quotation deleted successfully from the database!');
+      } catch (error) {
+        console.error('Error deleting from database:', error);
+        alert('Error deleting quotation: ' + error.message);
+      }
+    }
+  };
+
+  const renderSubscriptionContent = (item, field) => {
+    const content = item[field];
+    if (!content && isEditing) return <div className="text-gray-500 italic min-h-8 p-1 cursor-pointer">Click to add {field === 'serialNumber' ? 'serial number' : 'details'}...</div>;
+    if (!content && !isEditing) return <div className="min-h-8 p-1">&nbsp;</div>;
+    return <div
+      dangerouslySetInnerHTML={{ __html: content }}
+      className="min-h-8 p-1 leading-relaxed"
+      style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+    />;
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-100 flex flex-col">
+      {/* Top Navigation Bar */}
+      <div className="bg-white shadow-sm border-b print:hidden">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex gap-4">
+              <button
+                onClick={() => setActiveTab('saved')}
+                className={`px-3 py-1.5 rounded flex items-center gap-2 text-xs font-semibold transition-colors cursor-pointer ${
+                  activeTab === 'saved'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                <FolderOpen size={14} />
+                Saved Quotations ({savedQuotations.length})
+              </button>
+            </div>
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => setActiveTab('editor')}
+                className={`px-3 py-1.5 rounded flex items-center gap-2 text-xs font-semibold transition-colors cursor-pointer ${
+                  activeTab === 'editor'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                <FileText size={14} />
+                Form Editor
+              </button>
+              {activeTab === 'editor' && (
+                <>
+                  <div className="relative">
+                    {/* Trigger Button (Arrow) */}
+                    <button
+                      onClick={() => setIsSpeedDialOpen(!isSpeedDialOpen)}
+                      className="w-10 h-10 bg-blue-600 hover:bg-blue-700 text-white rounded-full flex items-center justify-center shadow-lg transition-transform focus:outline-none cursor-pointer"
+                    >
+                      <span className={`text-base transition-transform duration-300 ${isSpeedDialOpen ? 'rotate-180' : 'rotate-0'}`}>
+                        ▼
+                      </span>
+                    </button>
+
+                    {/* Radial/Wheel Action Buttons */}
+                    {isSpeedDialOpen && (
+                      <div className="absolute right-0 top-12 bg-white/95 backdrop-blur-md shadow-2xl rounded-full border border-gray-200 p-8 z-50 flex items-center justify-center" style={{ width: '200px', height: '200px', marginRight: '-80px' }}>
+                        {/* Central circle */}
+                        <div className="w-12 h-12 bg-blue-600 text-white rounded-full flex items-center justify-center shadow-inner">
+                          <span className="text-lg">⚙️</span>
+                        </div>
+
+                        {/* New (Top-Left) */}
+                        <button
+                          onClick={() => { generateNewQuotation(); setIsSpeedDialOpen(false); }}
+                          title="New"
+                          className="absolute w-11 h-11 bg-green-500 hover:bg-green-600 text-white rounded-full flex items-center justify-center shadow-md transition-all hover:scale-110 active:scale-95 cursor-pointer"
+                          style={{ top: '15px', left: '15px' }}
+                        >
+                          <Plus size={18} />
+                        </button>
+
+                        {/* Save (Top-Right) */}
+                        <button
+                          onClick={() => { saveQuotation(); setIsSpeedDialOpen(false); }}
+                          title="Save"
+                          className="absolute w-11 h-11 bg-blue-500 hover:bg-blue-600 text-white rounded-full flex items-center justify-center shadow-md transition-all hover:scale-110 active:scale-95 cursor-pointer"
+                          style={{ top: '15px', right: '15px' }}
+                        >
+                          <Save size={18} />
+                        </button>
+
+                        {/* PDF (Bottom-Left) */}
+                        <button
+                          onClick={() => { downloadPDF(); setIsSpeedDialOpen(false); }}
+                          title="PDF"
+                          className="absolute w-11 h-11 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-md transition-all hover:scale-110 active:scale-95 cursor-pointer"
+                          style={{ bottom: '15px', left: '15px' }}
+                        >
+                          <Download size={18} />
+                        </button>
+
+                        {/* Mark Revised (Bottom-Right) */}
+                        <button
+                          onClick={() => { markAsRevised(); setIsSpeedDialOpen(false); }}
+                          title="Mark Revised"
+                          className="absolute w-11 h-11 bg-orange-500 hover:bg-orange-600 text-white rounded-full flex items-center justify-center shadow-md transition-all hover:scale-110 active:scale-95 cursor-pointer"
+                          style={{ bottom: '15px', right: '15px' }}
+                        >
+                          <Edit3 size={18} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <button onClick={toggleEditMode} className={`px-3 py-1.5 rounded flex items-center gap-2 text-xs transition-colors cursor-pointer ${isEditing ? 'bg-green-500 text-white hover:bg-green-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Edit3 size={14} /> {isEditing ? 'Editing ON' : 'Editing OFF'}</button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+        {activeTab === 'editor' && (
+          <div className="bg-gray-50 px-4 py-2 border-t flex flex-wrap items-center gap-4">
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-gray-600">Amount:</span>
+                <input type="text" value={formData.amount} onChange={(e) => handleAmountChange(e.target.value)} className="w-32 border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Enter amount" />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-gray-600">Currency:</span>
+                <select value={formData.displayCurrency} onChange={(e) => handleCurrencyChange(e.target.value)} className="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  {Object.keys(CURRENCY_SYMBOLS).map(c => <option key={c} value={c}>{c} ({CURRENCY_SYMBOLS[c]})</option>)}
+                </select>
+              </div>
+              <div className="relative">
+                <button onClick={() => setShowDatePicker(!showDatePicker)} className="flex items-center gap-1 text-xs text-gray-700 hover:text-gray-900 border border-gray-300 px-3 py-1.5 rounded bg-white hover:bg-gray-50"><Calendar size={14} /> Select Date</button>
+                {showDatePicker && <div ref={calendarRef} className="absolute top-full left-0 mt-1 z-50 shadow-lg border rounded-lg bg-white"><CalendarComponent onDateSelect={handleDateSelect} /></div>}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Main Content Area */}
+      <div className="flex-1 overflow-y-auto p-4">
+        {activeTab === 'editor' ? (
+          <div className="bg-white shadow-lg rounded-lg overflow-hidden max-w-4xl mx-auto print:shadow-none print:max-w-none">
+            {showTextEditor.id && (
+              <TinyMCEEditor
+                content={editorContent}
+                onClose={closeTextEditor}
+                onSave={(content) => {
+                  updateSubscriptionItem(showTextEditor.id, showTextEditor.field, content);
+                  closeTextEditor();
+                }}
+              />
+            )}
+
+            <div className="p-8 print:p-0">
+              {/* Header */}
+              <div className="flex justify-between items-start mb-6">
+                <div className="space-y-1 text-sm font-bold">
+                  <div>#246, Devaji vip Plaza, VIP Road</div>
+                  <div>Zirakpur, Punjab Pin : 140603</div>
+                  <div className="mt-3">No. {quotationInfo.number}</div>
+                  <div>Dated: {quotationInfo.date}</div>
+                </div>
+                <div className="text-right">
+                  <img
+                    src={companyLogo}
+                    alt="Company Logo"
+                    className="object-contain"
+                    style={{ width: '280px', height: '140px' }}
+                  />
+                </div>
+              </div>
+
+              {/* Client Info */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div className="space-y-3">
+                  <FormField
+                    label="Business Name"
+                    value={formData.clientName}
+                    onChange={(value) => handleFormChange('clientName', value)}
+                  />
+                  <FormField
+                    label="Contact Person"
+                    value={formData.contactPerson}
+                    onChange={(value) => handleFormChange('contactPerson', value)}
+                  />
+                  <FormField
+                    label="Phone/Mobile"
+                    value={formData.phone}
+                    onChange={(value) => handleFormChange('phone', value)}
+                  />
+                </div>
+                <div>
+                  <FormField
+                    label="Address"
+                    value={formData.address}
+                    onChange={(value) => handleFormChange('address', value)}
+                    type="textarea"
+                    rows={4}
+                  />
+                </div>
+              </div>
+
+              {/* Subscription Table */}
+              <div className="mb-6">
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="text-base font-bold">SUBSCRIPTION DETAILS</h3>
+                  <button
+                    onClick={addSubscriptionItem}
+                    className="print:hidden px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 flex items-center gap-1"
+                  >
+                    <Plus size={12} /> Add
+                  </button>
+                </div>
+                <table className="w-full text-sm" style={{ border: '1px solid black', tableLayout: 'fixed' }}>
+                  <thead>
+                    <tr className="bg-gray-100">
+                      <th className="p-2 text-left w-1/5" style={{ border: '1px solid black' }}>S. No.</th>
+                      <th className="p-2 text-left w-3/4" style={{ border: '1px solid black' }}>SUBSCRIPTION</th>
+                      <th className="print:hidden p-2 text-left w-1/12" style={{ border: '1px solid black' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {subscriptionItems.map((item) => (
+                      <tr key={item.id}>
+                        <td
+                          onClick={() => openTextEditor(item.id, 'serialNumber')}
+                          className={`p-2 align-top ${isEditing ? 'cursor-pointer border-dashed border-blue-400 bg-blue-50' : ''
+                            }`}
+                          style={{ border: '1px solid black', width: '20%' }}
+                        >
+                          {renderSubscriptionContent(item, 'serialNumber')}
+                        </td>
+                        <td
+                          onClick={() => openTextEditor(item.id, 'subscription')}
+                          className={`p-2 align-top ${isEditing ? 'cursor-pointer border-dashed border-blue-400 bg-blue-50' : ''
+                            }`}
+                          style={{ border: '1px solid black', width: '70%' }}
+                        >
+                          {renderSubscriptionContent(item, 'subscription')}
+                        </td>
+                        <td className="print:hidden p-2 text-center" style={{ border: '1px solid black', width: '10%' }}>
+                          <button
+                            onClick={() => removeSubscriptionItem(item.id)}
+                            disabled={subscriptionItems.length === 1}
+                            className="p-1 text-red-500 hover:bg-red-50 rounded disabled:opacity-50"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Footer Section */}
+              <div className="mt-8">
+                {/* Amount */}
+                <div className="mb-6 border-2 border-black p-4 bg-gray-50">
+                  <div className="flex items-center justify-center gap-6">
+                    <h3 className="text-2xl font-bold">AMOUNT</h3>
+                    <span className="text-2xl font-bold">{formData.displayCurrency} ({CURRENCY_SYMBOLS[formData.displayCurrency]})</span>
+                    {formData.amount && <span className="text-2xl font-bold">{formatAmountWithCommas(formData.amount)}</span>}
+                  </div>
+                  <div className="text-center text-sm font-semibold mt-2">(GST EXTRA)</div>
+                </div>
+                <div className="text-center text-sm font-bold text-red-600 mb-6">
+                  * Cheques should be drawn in favour of Devine sTudio
+                </div>
+
+                {/* Payment Details */}
+                <div className="mb-6">
+                  <h3 className="text-lg font-bold mb-3">PAYMENT DETAILS</h3>
+                  <div className="grid grid-cols-2 gap-3 mb-4 text-sm">
+                    <div className="mb-2">
+                      <div className="text-sm font-bold text-gray-700">Bank Name</div>
+                      <div className="text-sm font-semibold text-gray-900">{formData.bankName}</div>
+                    </div>
+                    <div className="mb-2">
+                      <div className="text-sm font-bold text-gray-700">Account Number</div>
+                      <div className="text-sm font-semibold text-gray-900">{formData.accountNumber}</div>
+                    </div>
+                    <div className="mb-2">
+                      <div className="text-sm font-bold text-gray-700">Account Name</div>
+                      <div className="text-sm font-semibold text-gray-900">{formData.accountName}</div>
+                    </div>
+                    <div className="mb-2">
+                      <div className="text-sm font-bold text-gray-700">IFSC Code</div>
+                      <div className="text-sm font-semibold text-gray-900">{formData.ifscCode}</div>
+                    </div>
+                  </div>
+
+                  <h3 className="text-lg font-bold mb-3">DECLARATION</h3>
+                  <div className="space-y-2 text-sm leading-relaxed font-medium">
+                    <p className="font-semibold">This is an application for Promotional services to BUILDING INDIA DIGITAL.</p>
+                    {[
+                      "All information including text & picture to be provided by the client who should also be the legal copyright owner.",
+                      "BUILDING INDIA DIGITAL shall not be liable for any claims/damages arising out of content posted.",
+                      "Work shall commence only after clearance of cheques/pay order.",
+                      "We are not responsible for future changes if business page already made by client.",
+                      "BUILDING INDIA DIGITAL will take 60 days to complete the services/work.",
+                      "After work starts there will be No Claim & No Refund.",
+                      "Payment covered under 'Advertising Contract' u/s 194C. TDS @2% if applicable.",
+                      "I allow BUILDING INDIA DIGITAL to make commercial calls to my mobile number(s).",
+                      "This declaration holds valid even if numbers registered for NDNC."
+                    ].map((term, index) => (
+                      <p key={index} className="flex items-start font-medium">
+                        <span className="mr-2 font-bold">•</span>
+                        <span>{term}</span>
+                      </p>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Signatures */}
+                <div className="grid grid-cols-2 gap-6 mb-6">
+                  <div className="text-left">
+                    <h3 className="font-bold text-base mb-3">CLIENT SIGNATURE</h3>
+                    <div className="h-20 flex items-end justify-start">
+                      <div className="w-full border-t border-gray-300 pt-2">
+                        <div className="text-xs text-gray-500"></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-left">
+                    <h3 className="font-bold text-base mb-0 pb-0 leading-tight">ORGANISATION SIGNATURE</h3>
+                    <img
+                      src={signatureImage}
+                      alt="Organization Signature"
+                      style={{
+                        width: '200px',
+                        height: '140px',
+                        display: 'block',
+                        marginTop: '-18px'
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Terms & Conditions */}
+              <div className="border-t pt-4" style={{ pageBreakBefore: 'always' }}>
+                <h3 className="text-lg font-bold text-center mb-4">TERMS & CONDITIONS OF SERVICES</h3>
+                <div className="space-y-3 text-sm leading-relaxed font-medium">
+                  <div>
+                    <h4 className="font-bold mb-1">1. GENERAL</h4>
+                    <p className="mb-1">1.1 The terms & conditions herein shall constitute an entire Agreement between BUILDING INDIA DIGITAL and Customer. 1.2 Any invalid clause shall be deemed severable and not affect remaining clauses.</p>
+                  </div>
+
+                  <div>
+                    <h4 className="font-bold mb-1">2. SERVICES, EXCLUSIONS & PERFORMANCE</h4>
+                    <p className="mb-1">2.1 If requirements fall within restricted categories of Facebook/YouTube, BUILDING INDIA DIGITAL shall not be liable. 2.2 BUILDING INDIA DIGITAL reserves right to refuse/cancel any requirement. Budget will not be refunded. 2.3 Not responsible for delay due to Act of God, war, riot, strike, fire, flood, or any cause beyond control.</p>
+                  </div>
+
+                  <div>
+                    <h4 className="font-bold mb-1">3. PAYMENT TERMS</h4>
+                    <p className="mb-1">3.1 Customer shall pay fees as specified in quotation/invoice. 3.2 All payments in advance unless agreed in writing. 3.3 Late payments attract 2% monthly interest.</p>
+                  </div>
+
+                  <div>
+                    <h4 className="font-bold mb-1">4. INTELLECTUAL PROPERTY</h4>
+                    <p className="mb-1">4.1 All IP rights in deliverables remain with BUILDING INDIA DIGITAL. 4.2 Customer warrants materials don't infringe third-party IP rights.</p>
+                  </div>
+
+                  <div>
+                    <h4 className="font-bold mb-1">5. CONFIDENTIALITY</h4>
+                    <p className="mb-1">5.1 Both parties agree to keep confidential all marked information. 5.2 Obligation survives termination.</p>
+                  </div>
+
+                  <div>
+                    <h4 className="font-bold mb-1">6. LIMITATION OF LIABILITY</h4>
+                    <p className="mb-1">6.1 Total liability shall not exceed total fees paid. 6.2 Not liable for indirect, special, or consequential damages.</p>
+                  </div>
+
+                  <div>
+                    <h4 className="font-bold mb-1">7. TERMINATION</h4>
+                    <p className="mb-1">7.1 Either party may terminate with 30 days notice. 7.2 May terminate immediately if Customer breaches material term.</p>
+                  </div>
+
+                  <div>
+                    <h4 className="font-bold mb-1">8. GOVERNING LAW</h4>
+                    <p className="mb-1">8.1 Governed by laws of India. 8.2 Disputes subject to courts in Zirakpur, Punjab.</p>
+                  </div>
+
+                  <div>
+                    <h4 className="font-bold mb-1">9. FORCE MAJEURE</h4>
+                    <p>9.1 Neither party liable for failure due to circumstances beyond control.</p>
+                  </div>
+
+                  <div>
+                    <h4 className="font-bold mb-1">10. ENTIRE AGREEMENT</h4>
+                    <p>10.1 This constitutes entire understanding and supersedes all prior agreements.</p>
+                  </div>
+
+                  <div>
+                    <h4 className="font-bold mb-1">11. PACKAGE VALIDITY</h4>
+                    <p className="font-bold">11.1 ABOVE PACKAGE IS FOR 1 ID ONLY</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="max-w-4xl mx-auto bg-white shadow-lg rounded-lg p-6 my-6 print:hidden">
+            <h2 className="text-xl font-bold mb-6">Saved Quotations</h2>
+            {groupedQuotations.length === 0 ? (
+              <p className="text-gray-500">No saved quotations found.</p>
+            ) : (
+              <div className="space-y-4">
+                {groupedQuotations.map(group => (
+                  <div key={group.label} className="border border-gray-200 rounded-lg overflow-hidden">
+                    <button onClick={() => toggleFolder(group.label)} className="w-full px-4 py-3 bg-gray-50 flex items-center justify-between hover:bg-gray-100 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <FolderOpen size={20} className="text-blue-500" />
+                        <span className="font-semibold text-gray-800 text-lg">{group.label}</span>
+                        <span className="text-xs text-blue-800 bg-blue-100 font-bold px-2.5 py-0.5 rounded-full">{group.quotations.length}</span>
+                      </div>
+                      <span className="text-gray-400 font-bold">{openFolders[group.label] ? '▼' : '▶'}</span>
+                    </button>
+                    
+                    {openFolders[group.label] && (
+                      <div className="divide-y divide-gray-100 bg-white">
+                        {group.quotations.map(quot => (
+                          <div key={quot.id} className="p-4 flex items-center justify-between hover:bg-gray-50">
+                            <div>
+                              <div className="font-medium flex items-center gap-2 text-gray-900">
+                                {quot.quotationInfo.number}
+                                {quot.formData.isRevised && (
+                                  <span className="bg-orange-500 text-white text-xs px-1.5 py-0.5 rounded">R{quot.formData.revisionNumber}</span>
+                                )}
+                              </div>
+                              <div className="text-sm text-gray-600 mt-1 font-medium">{quot.formData.clientName || 'No Client Name'}</div>
+                              <div className="text-xs text-gray-400 mt-1">Saved on: {new Date(quot.savedAt || Date.now()).toLocaleString()}</div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button onClick={() => { loadQuotation(quot); setActiveTab('editor'); }} className="px-4 py-1.5 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-600 transition-colors font-medium">Load</button>
+                              {quot.formData && (
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      const blob = await pdf(<QuotationPDF
+                                        formData={quot.formData}
+                                        quotationInfo={quot.quotationInfo}
+                                        subscriptionItems={quot.subscriptionItems}
+                                      />).toBlob();
+                                      const url = URL.createObjectURL(blob);
+                                      const link = document.createElement('a');
+                                      link.href = url;
+                                      link.download = `quotation-${quot.quotationInfo.number.replace(/\//g, '-')}.pdf`;
+                                      document.body.appendChild(link);
+                                      link.click();
+                                      document.body.removeChild(link);
+                                      URL.revokeObjectURL(url);
+                                    } catch (error) {
+                                      console.error('Error generating PDF:', error);
+                                      alert('Error generating PDF: ' + error.message);
+                                    }
+                                  }}
+                                  className="px-4 py-1.5 bg-green-500 text-white text-sm rounded-md hover:bg-green-600 transition-colors font-medium"
+                                >
+                                  Download PDF
+                                </button>
+                              )}
+                              <button onClick={() => deleteQuotation(quot.id)} className="px-4 py-1.5 bg-white text-red-500 text-sm rounded-md hover:bg-red-50 border border-red-200 transition-colors font-medium">Delete</button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default QuotationForm;
