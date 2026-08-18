@@ -308,230 +308,153 @@ const formatAmountWithCommas = (amount) => {
 const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top' }) => {
   const htmlString = typeof html === 'string' ? html : (html ? String(html) : '');
   if (!htmlString.trim()) return <Text style={customStyle}>{""}</Text>;
-  if (typeof window === 'undefined') return <Text style={customStyle}>{""}</Text>; // Safe guard for Next.js SSR
+  if (typeof window === 'undefined') return <Text style={customStyle}>{""}</Text>;
+
   const parser = new window.DOMParser();
   const doc = parser.parseFromString(htmlString, 'text/html');
-  const fs = customStyle?.fontSize || 10.5;
-  const scaleRatio = fs / 11.0;
-  const pMarginBottom = 2.0;
-  const liMarginBottom = 1.0;
 
-  const processChildren = (childNodes, style) => {
-    return Array.from(childNodes).map((node, i) => {
-      const rendered = renderNode(node, i, style);
-      if (typeof rendered === 'string' || typeof rendered === 'number') {
-        return (
-          <Text key={`str-${i}`} style={{ ...customStyle, ...style, width: '100%', textAlign: style.textAlign || customStyle.textAlign || 'left' }}>
-            {rendered}
-          </Text>
-        );
-      }
-      return rendered;
-    }).filter(Boolean);
-  };
-
-  const renderNode = (node, index, inheritedStyle = {}) => {
+  // Process inline nodes (returns text string or <Text> node with inline formatting)
+  const processInlineNode = (node, keyPrefix, inheritedStyle = {}) => {
     if (node.nodeType === 3) {
-      const text = node.textContent;
-      if (!text.trim() && text.includes('\n')) return '';
-      return text.replace(/&nbsp;/g, '\u00A0');
+      const text = node.textContent.replace(/&nbsp;/g, ' ').replace(/\u00A0/g, ' ');
+      if (!text) return '';
+      if (Object.keys(inheritedStyle).length > 0) {
+        return <Text key={keyPrefix} style={inheritedStyle}>{text}</Text>;
+      }
+      return text;
     }
     if (node.nodeType === 1) {
       const tag = node.tagName.toLowerCase();
       let style = { ...inheritedStyle };
 
-      // Parse inline styles from TinyMCE style attribute string (highly reliable)
       const styleAttr = node.getAttribute && node.getAttribute('style');
       if (styleAttr) {
-        const stylesList = styleAttr.split(';');
-        stylesList.forEach(item => {
+        styleAttr.split(';').forEach(item => {
           const parts = item.split(':');
           if (parts.length === 2) {
             const key = parts[0].trim().toLowerCase();
             const val = parts[1].trim();
-            if (key === 'text-align') {
-              style.textAlign = val;
-            } else if (key === 'font-size') {
-              let numSize = parseFloat(val);
-              if (!isNaN(numSize)) {
-                if (val.endsWith('em') || val.endsWith('rem')) {
-                  numSize = numSize * 11;
-                }
-                style.fontSize = Math.max(10.5, numSize * scaleRatio);
-              }
-            } else if (key === 'color') {
-              style.color = val;
-            } else if (key === 'background-color') {
-              style.backgroundColor = val;
-            } else if (key === 'text-decoration') {
-              if (val.includes('underline')) style.textDecoration = 'underline';
-              if (val.includes('line-through')) style.textDecoration = 'line-through';
-            } else if (key === 'font-weight') {
-              if (val === 'bold' || parseInt(val) >= 700) {
-                style.fontFamily = 'Helvetica-Bold';
-              }
-            } else if (key === 'font-style') {
-              if (val === 'italic') {
-                style.fontFamily = style.fontFamily === 'Helvetica-Bold' ? 'Helvetica-BoldOblique' : 'Helvetica-Oblique';
-              }
-            }
+            if (key === 'color') style.color = val;
+            else if (key === 'font-weight' && (val === 'bold' || parseInt(val) >= 700)) style.fontFamily = 'Helvetica-Bold';
+            else if (key === 'font-style' && val === 'italic') style.fontFamily = style.fontFamily === 'Helvetica-Bold' ? 'Helvetica-BoldOblique' : 'Helvetica-Oblique';
+            else if (key === 'text-decoration' && val.includes('underline')) style.textDecoration = 'underline';
           }
         });
       }
 
-      // Fallback: check DOM style object properties (in case they are populated)
-      if (node.style) {
-        if (node.style.textAlign && !style.textAlign) style.textAlign = node.style.textAlign;
-        if (node.style.color && !style.color) style.color = node.style.color;
-        if (node.style.backgroundColor && !style.backgroundColor) style.backgroundColor = node.style.backgroundColor;
-        if (node.style.fontSize && !style.fontSize) {
-          const fsVal = node.style.fontSize.trim();
-          let numSize = parseFloat(fsVal);
-          if (!isNaN(numSize)) {
-            if (fsVal.endsWith('em') || fsVal.endsWith('rem')) numSize = numSize * 11;
-            style.fontSize = Math.max(10.5, numSize * scaleRatio);
-          }
-        }
-      }
-
-      if (node.getAttribute && node.getAttribute('align')) {
-        style.textAlign = node.getAttribute('align');
-      }
-
       if (tag === 'strong' || tag === 'b') style.fontFamily = 'Helvetica-Bold';
-      if (tag === 'em' || tag === 'i') style.fontFamily = 'Helvetica-Oblique';
+      if (tag === 'em' || tag === 'i') style.fontFamily = style.fontFamily === 'Helvetica-Bold' ? 'Helvetica-BoldOblique' : 'Helvetica-Oblique';
       if (tag === 'u') style.textDecoration = 'underline';
 
-      if (['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(tag)) {
-        const children = Array.from(node.childNodes).map((child, i) => renderNode(child, i, style)).filter(Boolean);
-        const isPlainString = children.length === 1 && typeof children[0] === 'string';
-        const cleanStr = isPlainString ? children[0].replace(/\u00A0/g, '').trim() : 'nonempty';
-        if (children.length === 0 || cleanStr === '') {
-          return <View key={index} style={{ height: 3 }} />;
-        }
-        return (
-          <View key={index} style={{ marginBottom: pMarginBottom, width: '100%', alignItems: 'stretch' }}>
-            <Text style={{ ...customStyle, ...style, width: '100%', textAlign: style.textAlign || customStyle.textAlign || 'left' }}>{children}</Text>
-          </View>
-        );
+      const children = Array.from(node.childNodes)
+        .map((child, idx) => processInlineNode(child, `${keyPrefix}-${idx}`, style))
+        .filter(Boolean);
+
+      return children;
+    }
+    return '';
+  };
+
+  // Process block node (returns <View> containing <Text>)
+  const renderBlockNode = (node, keyIndex) => {
+    if (node.nodeType === 3) {
+      const text = node.textContent.trim();
+      if (!text) return null;
+      return (
+        <View key={`blk-${keyIndex}`} style={{ marginBottom: 2, width: '100%' }}>
+          <Text style={{ ...customStyle, textAlign: customStyle?.textAlign || 'left' }}>{text}</Text>
+        </View>
+      );
+    }
+
+    if (node.nodeType === 1) {
+      const tag = node.tagName.toLowerCase();
+      let blockStyle = { ...customStyle };
+      let textAlign = customStyle?.textAlign || 'left';
+
+      const styleAttr = node.getAttribute && node.getAttribute('style');
+      if (styleAttr) {
+        styleAttr.split(';').forEach(item => {
+          const parts = item.split(':');
+          if (parts.length === 2) {
+            const key = parts[0].trim().toLowerCase();
+            const val = parts[1].trim();
+            if (key === 'text-align') textAlign = val;
+            else if (key === 'color') blockStyle.color = val;
+            else if (key === 'font-weight' && (val === 'bold' || parseInt(val) >= 700)) blockStyle.fontFamily = 'Helvetica-Bold';
+          }
+        });
+      }
+      if (node.getAttribute && node.getAttribute('align')) {
+        textAlign = node.getAttribute('align');
       }
 
-      if (tag === 'div') {
+      if (['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'div'].includes(tag)) {
+        const inlineContent = Array.from(node.childNodes)
+          .map((child, idx) => processInlineNode(child, `inl-${keyIndex}-${idx}`, {}))
+          .filter(Boolean);
+
+        if (inlineContent.length === 0) {
+          return <View key={`blk-${keyIndex}`} style={{ height: 4 }} />;
+        }
         return (
-          <View key={index} style={{ marginBottom: pMarginBottom, width: '100%', alignItems: 'stretch' }}>
-            {processChildren(node.childNodes, style)}
+          <View key={`blk-${keyIndex}`} style={{ marginBottom: 3, width: '100%' }}>
+            <Text style={{ ...blockStyle, width: '100%', textAlign }}>{inlineContent}</Text>
           </View>
         );
       }
 
       if (tag === 'ul' || tag === 'ol') {
-        let liIndex = 0;
+        const listItems = Array.from(node.childNodes).filter(child => child.nodeType === 1 && child.tagName.toLowerCase() === 'li');
+        if (listItems.length === 0) return null;
         return (
-          <View key={index} style={{ marginBottom: pMarginBottom, paddingLeft: 10, width: '100%' }}>
-            {Array.from(node.childNodes).map((child, i) => {
-              if (child.nodeType === 1 && child.tagName.toLowerCase() === 'li') {
-                liIndex++;
-                let liStyle = { ...style };
-                const childStyleAttr = child.getAttribute && child.getAttribute('style');
-                if (childStyleAttr) {
-                  const stylesList = childStyleAttr.split(';');
-                  stylesList.forEach(sItem => {
-                    const parts = sItem.split(':');
-                    if (parts.length === 2) {
-                      const key = parts[0].trim().toLowerCase();
-                      const val = parts[1].trim();
-                      if (key === 'text-align') {
-                        if (val.includes('center')) liStyle.textAlign = 'center';
-                        else if (val.includes('right')) liStyle.textAlign = 'right';
-                        else if (val.includes('justify')) liStyle.textAlign = 'justify';
-                        else if (val.includes('left')) liStyle.textAlign = 'left';
-                      }
-                    }
-                  });
-                }
-                const textAlign = liStyle.textAlign || 'left';
-                return (
-                  <View key={`li-${i}`} style={{
-                    flexDirection: 'row',
-                    marginBottom: liMarginBottom,
-                    width: '100%',
-                    justifyContent: textAlign === 'center' ? 'center' : textAlign === 'right' ? 'flex-end' : 'flex-start',
-                    alignItems: 'flex-start'
-                  }}>
-                    <Text style={{ ...customStyle, ...liStyle, width: 'auto', marginRight: 6 }}>{tag === 'ol' ? `${liIndex}.` : '•'}</Text>
-                    <View style={{ flex: textAlign === 'left' || textAlign === 'justify' ? 1 : 0 }}>
-                      {processChildren(child.childNodes, liStyle)}
-                    </View>
+          <View key={`blk-${keyIndex}`} style={{ marginBottom: 4, paddingLeft: 10, width: '100%' }}>
+            {listItems.map((liNode, liIdx) => {
+              const inlineContent = Array.from(liNode.childNodes)
+                .map((child, idx) => processInlineNode(child, `li-${keyIndex}-${liIdx}-${idx}`, {}))
+                .filter(Boolean);
+              return (
+                <View key={`li-row-${keyIndex}-${liIdx}`} style={{ flexDirection: 'row', marginBottom: 2, width: '100%', alignItems: 'flex-start' }}>
+                  <Text style={{ ...blockStyle, width: 'auto', marginRight: 6 }}>{tag === 'ol' ? `${liIdx + 1}.` : '•'}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ ...blockStyle, textAlign }}>{inlineContent}</Text>
                   </View>
-                );
-              }
-              const rendered = renderNode(child, i, style);
-              if (typeof rendered === 'string' || typeof rendered === 'number') {
-                if (!String(rendered).trim()) return <Text key={`str-${i}`} style={{ ...customStyle, ...style }}>{""}</Text>;
-                return (
-                  <Text key={`str-${i}`} style={{ ...customStyle, ...style, width: '100%', textAlign: style.textAlign || customStyle.textAlign || 'left' }}>
-                    {rendered}
-                  </Text>
-                );
-              }
-              return rendered;
-            }).filter(Boolean)}
+                </View>
+              );
+            })}
           </View>
         );
       }
 
-      if (tag === 'li') {
-        let liStyle = { ...style };
-        const styleAttr = node.getAttribute && node.getAttribute('style');
-        if (styleAttr) {
-          const stylesList = styleAttr.split(';');
-          stylesList.forEach(sItem => {
-            const parts = sItem.split(':');
-            if (parts.length === 2) {
-              const key = parts[0].trim().toLowerCase();
-              const val = parts[1].trim();
-              if (key === 'text-align') {
-                if (val.includes('center')) liStyle.textAlign = 'center';
-                else if (val.includes('right')) liStyle.textAlign = 'right';
-                else if (val.includes('justify')) liStyle.textAlign = 'justify';
-                else if (val.includes('left')) liStyle.textAlign = 'left';
-              }
-            }
-          });
-        }
-        const textAlign = liStyle.textAlign || 'left';
-        return (
-          <View key={index} style={{
-            flexDirection: 'row',
-            marginBottom: liMarginBottom,
-            width: '100%',
-            justifyContent: textAlign === 'center' ? 'center' : textAlign === 'right' ? 'flex-end' : 'flex-start',
-            alignItems: 'flex-start'
-          }}>
-            <Text style={{ ...customStyle, ...liStyle, width: 'auto', marginRight: 6 }}>{'•'}</Text>
-            <View style={{ flex: textAlign === 'left' || textAlign === 'justify' ? 1 : 0 }}>
-              {processChildren(node.childNodes, liStyle)}
-            </View>
-          </View>
-        );
-      }
+      const inlineContent = Array.from(node.childNodes)
+        .map((child, idx) => processInlineNode(child, `fallback-${keyIndex}-${idx}`, {}))
+        .filter(Boolean);
 
-      if (tag === 'br') {
-        return '\n';
-      }
-
-      const children = Array.from(node.childNodes).map((child, i) => renderNode(child, i, style));
-      return <Text key={index} style={{ ...customStyle, ...style, textAlign: style.textAlign || customStyle.textAlign || 'left' }}>{children}</Text>;
+      if (inlineContent.length === 0) return null;
+      return (
+        <View key={`blk-${keyIndex}`} style={{ marginBottom: 2, width: '100%' }}>
+          <Text style={{ ...blockStyle, width: '100%', textAlign }}>{inlineContent}</Text>
+        </View>
+      );
     }
-    return <Text key={index} style={{ ...customStyle, ...style }}>{""}</Text>;
+
+    return null;
   };
+
+  const blockNodes = Array.from(doc.body.childNodes)
+    .map((node, i) => renderBlockNode(node, i))
+    .filter(Boolean);
+
+  if (blockNodes.length === 0) {
+    return <Text style={customStyle}>{""}</Text>;
+  }
 
   const vAlignMap = { top: 'flex-start', center: 'center', bottom: 'flex-end' };
   const vJustify = vAlignMap[verticalAlignment] || 'flex-start';
 
   return (
     <View style={{ padding: 2, width: '100%', flex: 1, justifyContent: vJustify }}>
-      {processChildren(doc.body.childNodes, {})}
+      {blockNodes}
     </View>
   );
 };
