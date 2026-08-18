@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Download, Edit3, Plus, Trash2, Calendar, X, Save, FolderOpen, Menu, FileText } from 'lucide-react';
+import { Download, Edit3, Plus, Trash2, Calendar, X, Save, FolderOpen, Menu, FileText, MapPin, Phone } from 'lucide-react';
 import { Editor } from '@tinymce/tinymce-react';
 import { Document, Page, Text, View, StyleSheet, pdf, Image, Font, Svg, Path } from '@react-pdf/renderer';
 import { Buffer } from 'buffer';
@@ -546,38 +546,41 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
   };
 
   const renderPageHeader = () => (
-    <View style={{ marginBottom: 6 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4, marginTop: 2 }}>
+    <View style={{ marginBottom: 8 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 4, marginTop: 2 }}>
         {/* Address Section */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', width: 285 }}>
-          <Svg viewBox="0 0 24 24" style={{ width: 15, height: 15, marginRight: 6 }}>
-            <Path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="#000000" />
+        <View style={{ flexDirection: 'row', alignItems: 'flex-start', width: 300 }}>
+          <Svg viewBox="0 0 24 24" style={{ width: 14, height: 14, marginRight: 6, marginTop: 2, flexShrink: 0 }}>
+            <Path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5-2.5z" fill="#000000" />
           </Svg>
           <View>
-            <Text style={{ fontSize: 10.0, fontFamily: 'Helvetica-Bold', lineHeight: 1.15 }}>#246, Devaji vip Plaza, VIP Road</Text>
-            <Text style={{ fontSize: 10.0, fontFamily: 'Helvetica-Bold', lineHeight: 1.15 }}>Zirakpur, Punjab Pin : 140603</Text>
+            <Text style={{ fontSize: 10.5, fontFamily: 'Helvetica-Bold', lineHeight: 1.2 }}>#246, Devaji vip Plaza, VIP Road</Text>
+            <Text style={{ fontSize: 10.5, fontFamily: 'Helvetica-Bold', lineHeight: 1.2 }}>Zirakpur, Punjab Pin : 140603</Text>
           </View>
         </View>
         {/* Logo Right Section */}
-        <View style={{ width: 250, height: 60 }}>
+        <View style={{ width: 230, height: 65 }}>
           <Image src={companyLogo} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
         </View>
       </View>
 
       {/* Phone Bar Below */}
-      <View style={{ backgroundColor: '#000000', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: 18, width: 285, marginBottom: 4 }}>
+      <View style={{ backgroundColor: '#000000', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: 18, width: 290, marginBottom: 6, marginTop: 4 }}>
         <Svg viewBox="0 0 24 24" style={{ width: 10, height: 10, marginRight: 4 }}>
           <Path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" fill="#ffffff" />
         </Svg>
         <Text style={{ color: '#ffffff', fontSize: 9.5, fontFamily: 'Helvetica-Bold' }}>90414-99964/73</Text>
       </View>
 
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 3, marginBottom: 4 }}>
-        <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold' }}>No. <Text style={{ fontFamily: 'Helvetica-Bold' }}>{quotationInfo.number}</Text></Text>
+      {/* No. & Dated Row */}
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 2, marginBottom: 4 }}>
+        <Text style={{ fontSize: 10.5, fontFamily: 'Helvetica-Bold' }}>
+          No. {quotationInfo.number}
+        </Text>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold' }}>Dated </Text>
-          <View style={{ borderBottomWidth: 1, borderColor: '#000000', width: 120, alignItems: 'center', marginLeft: 4 }}>
-            <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', marginBottom: 2 }}>{quotationInfo.date}</Text>
+          <Text style={{ fontSize: 10.5, fontFamily: 'Helvetica-Bold', marginRight: 15 }}>Dated</Text>
+          <View style={{ borderBottomWidth: 1, borderColor: '#000000', width: 130, alignItems: 'center' }}>
+            <Text style={{ fontSize: 10.5, fontFamily: 'Helvetica-Bold', marginBottom: 2 }}>{quotationInfo.date}</Text>
           </View>
         </View>
       </View>
@@ -601,7 +604,7 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
   return (
     <Document>
       <Page size="A4" style={styles.page}>
-        <View fixed>
+        <View>
           {renderPageHeader()}
         </View>
 
@@ -1505,19 +1508,37 @@ const QuotationForm = () => {
 
             <div className="p-8 print:p-0">
               {/* Header */}
-              <div className="flex justify-between items-start mb-6">
-                <div className="space-y-1 text-sm font-bold">
-                  <div>#246, Devaji vip Plaza, VIP Road, Zirakpur, Punjab Pin : 140603</div>
-                  <div className="mt-3">No. {quotationInfo.number}</div>
-                  <div>Dated: {quotationInfo.date}</div>
+              <div className="mb-6">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <div className="flex items-start gap-2">
+                      <MapPin size={18} className="mt-0.5 text-black flex-shrink-0" />
+                      <div className="text-sm font-bold leading-tight">
+                        <div>#246, Devaji vip Plaza, VIP Road</div>
+                        <div>Zirakpur, Punjab Pin : 140603</div>
+                      </div>
+                    </div>
+                    <div className="bg-black text-white px-3 py-1 mt-2.5 flex items-center justify-center gap-2 w-72">
+                      <Phone size={12} fill="white" className="text-white" />
+                      <span className="text-xs font-bold tracking-wider">90414-99964/73</span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <img
+                      src={companyLogo}
+                      alt="Company Logo"
+                      className="object-contain"
+                      style={{ width: '250px', height: '80px' }}
+                    />
+                  </div>
                 </div>
-                <div className="text-right">
-                  <img
-                    src={companyLogo}
-                    alt="Company Logo"
-                    className="object-contain"
-                    style={{ width: '280px', height: '140px' }}
-                  />
+
+                <div className="flex justify-between items-center mt-4">
+                  <div className="text-sm font-bold">No. {quotationInfo.number}</div>
+                  <div className="flex items-center gap-2 text-sm font-bold">
+                    <span>Dated</span>
+                    <span className="border-b border-black px-6 pb-0.5 text-center min-w-32 inline-block">{quotationInfo.date}</span>
+                  </div>
                 </div>
               </div>
 
