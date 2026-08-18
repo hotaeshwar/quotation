@@ -547,38 +547,39 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
 
   const renderPageHeader = () => (
     <View style={{ marginBottom: 8 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 4, marginTop: 2 }}>
-        {/* Address Section */}
-        <View style={{ flexDirection: 'row', alignItems: 'flex-start', width: 300 }}>
-          <Svg viewBox="0 0 24 24" style={{ width: 14, height: 14, marginRight: 6, marginTop: 2, flexShrink: 0 }}>
-            <Path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5-2.5z" fill="#000000" />
-          </Svg>
-          <View>
-            <Text style={{ fontSize: 10.5, fontFamily: 'Helvetica-Bold', lineHeight: 1.2 }}>#246, Devaji vip Plaza, VIP Road</Text>
-            <Text style={{ fontSize: 10.5, fontFamily: 'Helvetica-Bold', lineHeight: 1.2 }}>Zirakpur, Punjab Pin : 140603</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, marginTop: 2 }}>
+        {/* Address & Phone Left Section */}
+        <View style={{ width: 270 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+            <Svg viewBox="0 0 24 24" style={{ width: 14, height: 14, marginRight: 5, flexShrink: 0 }}>
+              <Path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5-2.5z" fill="#000000" />
+            </Svg>
+            <View>
+              <Text style={{ fontSize: 10.0, fontFamily: 'Helvetica-Bold', lineHeight: 1.2 }}>#246, Devaji vip Plaza, VIP Road</Text>
+              <Text style={{ fontSize: 10.0, fontFamily: 'Helvetica-Bold', lineHeight: 1.2 }}>Zirakpur, Punjab Pin : 140603</Text>
+            </View>
+          </View>
+          <View style={{ backgroundColor: '#000000', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: 18, width: 260 }}>
+            <Svg viewBox="0 0 24 24" style={{ width: 10, height: 10, marginRight: 4 }}>
+              <Path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" fill="#ffffff" />
+            </Svg>
+            <Text style={{ color: '#ffffff', fontSize: 9.5, fontFamily: 'Helvetica-Bold' }}>90414-99964/73</Text>
           </View>
         </View>
-        {/* Logo Right Section */}
-        <View style={{ width: 230, height: 65 }}>
+
+        {/* Logo Right Section (Bigger & Aligned in one row with address) */}
+        <View style={{ width: 275, height: 85 }}>
           <Image src={companyLogo} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
         </View>
       </View>
 
-      {/* Phone Bar Below */}
-      <View style={{ backgroundColor: '#000000', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: 18, width: 290, marginBottom: 6, marginTop: 4 }}>
-        <Svg viewBox="0 0 24 24" style={{ width: 10, height: 10, marginRight: 4 }}>
-          <Path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" fill="#ffffff" />
-        </Svg>
-        <Text style={{ color: '#ffffff', fontSize: 9.5, fontFamily: 'Helvetica-Bold' }}>90414-99964/73</Text>
-      </View>
-
       {/* No. & Dated Row */}
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 2, marginBottom: 4 }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, marginBottom: 4 }}>
         <Text style={{ fontSize: 10.5, fontFamily: 'Helvetica-Bold' }}>
           No. {quotationInfo.number}
         </Text>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <Text style={{ fontSize: 10.5, fontFamily: 'Helvetica-Bold', marginRight: 15 }}>Dated</Text>
+          <Text style={{ fontSize: 10.5, fontFamily: 'Helvetica-Bold', marginRight: 10 }}>Dated</Text>
           <View style={{ borderBottomWidth: 1, borderColor: '#000000', width: 130, alignItems: 'center' }}>
             <Text style={{ fontSize: 10.5, fontFamily: 'Helvetica-Bold', marginBottom: 2 }}>{quotationInfo.date}</Text>
           </View>
@@ -1462,6 +1463,16 @@ const QuotationForm = () => {
           <div className="bg-gray-50 px-4 py-2 border-t flex flex-wrap items-center gap-4">
             <div className="flex flex-wrap items-center gap-4">
               <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-gray-600">Date:</span>
+                <input
+                  type="text"
+                  value={quotationInfo.date || ''}
+                  onChange={(e) => setQuotationInfo(prev => ({ ...prev, date: e.target.value }))}
+                  className="w-32 border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white font-medium"
+                  placeholder="DD-MMM-YYYY"
+                />
+              </div>
+              <div className="flex items-center gap-2">
                 <span className="text-xs font-medium text-gray-600">Amount:</span>
                 <input type="text" value={formData.amount} onChange={(e) => handleAmountChange(e.target.value)} className="w-32 border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Enter amount" />
               </div>
@@ -1509,10 +1520,10 @@ const QuotationForm = () => {
             <div className="p-8 print:p-0">
               {/* Header */}
               <div className="mb-6">
-                <div className="flex justify-between items-start">
+                <div className="flex justify-between items-center">
                   <div>
-                    <div className="flex items-start gap-2">
-                      <MapPin size={18} className="mt-0.5 text-black flex-shrink-0" />
+                    <div className="flex items-center gap-2">
+                      <MapPin size={18} className="text-black flex-shrink-0" />
                       <div className="text-sm font-bold leading-tight">
                         <div>#246, Devaji vip Plaza, VIP Road</div>
                         <div>Zirakpur, Punjab Pin : 140603</div>
@@ -1528,7 +1539,7 @@ const QuotationForm = () => {
                       src={companyLogo}
                       alt="Company Logo"
                       className="object-contain"
-                      style={{ width: '250px', height: '80px' }}
+                      style={{ width: '300px', height: '95px' }}
                     />
                   </div>
                 </div>
@@ -1537,7 +1548,13 @@ const QuotationForm = () => {
                   <div className="text-sm font-bold">No. {quotationInfo.number}</div>
                   <div className="flex items-center gap-2 text-sm font-bold">
                     <span>Dated</span>
-                    <span className="border-b border-black px-6 pb-0.5 text-center min-w-32 inline-block">{quotationInfo.date}</span>
+                    <input
+                      type="text"
+                      value={quotationInfo.date || ''}
+                      onChange={(e) => setQuotationInfo(prev => ({ ...prev, date: e.target.value }))}
+                      className="border-b border-black text-center min-w-32 font-bold bg-transparent focus:outline-none focus:border-blue-500 text-sm"
+                      placeholder="DD-MMM-YYYY"
+                    />
                   </div>
                 </div>
               </div>
