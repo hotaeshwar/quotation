@@ -50,7 +50,7 @@ export default function QuotationPreview({ formData, companySettings, containerR
   };
 
   const itemChunks = chunkArray(items);
-  const totalPages = itemChunks.length + 1; // +1 for Declaration, Signatures & Terms page
+  const totalPages = itemChunks.length + 2; // +1 for Declaration & Payment Details, +1 for Terms & Conditions
 
   const renderHeader = () => (
     <div className="flex flex-col sm:flex-row justify-between items-start pb-1 gap-4">
@@ -93,6 +93,8 @@ export default function QuotationPreview({ formData, companySettings, containerR
       </div>
     </div>
   );
+
+  const declarationPageNum = itemChunks.length + 1;
 
   return (
     <div className="bg-gray-200 p-4 sm:p-6 overflow-x-auto overflow-y-auto max-h-[calc(100vh-80px)] flex flex-col items-center gap-6 select-none w-full">
@@ -217,43 +219,14 @@ export default function QuotationPreview({ formData, companySettings, containerR
                     </div>
                   </div>
 
-                  {/* AMOUNT BOX, CHEQUE NOTE & PAYMENT DETAILS (RENDERED ONLY ON THE LAST SUBSCRIPTION PAGE) */}
+                  {/* AMOUNT BOX (RENDERED ONLY ON THE LAST SUBSCRIPTION PAGE) */}
                   {isLastSubscriptionPage && (
-                    <div className="space-y-2.5 pt-1">
-                      {/* AMOUNT BOX */}
+                    <div className="pt-1">
                       <div className="border-2 border-black p-2.5 text-center rounded-sm" style={{ backgroundColor: '#f9fafb', borderColor: '#000000', borderWidth: '2px', borderStyle: 'solid' }}>
                         <div className="text-lg sm:text-xl font-extrabold tracking-tight" style={{ color: '#000000' }}>
                           AMOUNT {formData.currency || 'INR (₹)'} {formData.amount ? Number(formData.amount).toLocaleString('en-IN') : '0'}
                         </div>
                         <div className="text-xs font-bold tracking-wider mt-0.5" style={{ color: '#000000' }}>(GST EXTRA)</div>
-                      </div>
-
-                      {/* CHEQUE INSTRUCTION */}
-                      <div className="text-center font-bold text-xs tracking-wide" style={{ color: '#dc2626' }}>
-                        {payment.chequeInstruction || '* Cheques should be drawn in favour of Devine sTudio'}
-                      </div>
-
-                      {/* PAYMENT DETAILS SECTION */}
-                      <div className="space-y-1">
-                        <div className="font-bold text-xs uppercase tracking-wider" style={{ color: '#000000' }}>Payment Details</div>
-                        <div className="grid grid-cols-2 gap-2.5 text-xs p-2.5 rounded border border-gray-300" style={{ backgroundColor: '#f9fafb', borderColor: '#d1d5db', color: '#000000' }}>
-                          <div>
-                            <span className="font-bold block text-[11px]" style={{ color: '#4b5563' }}>Bank Name</span>
-                            <span className="font-bold text-sm" style={{ color: '#000000' }}>{payment.bankName || 'Karnataka Bank (Zirakpur)'}</span>
-                          </div>
-                          <div>
-                            <span className="font-bold block text-[11px]" style={{ color: '#4b5563' }}>Account Number</span>
-                            <span className="font-bold text-sm" style={{ color: '#000000' }}>{payment.accountNumber || '0899202400002001'}</span>
-                          </div>
-                          <div>
-                            <span className="font-bold block text-[11px]" style={{ color: '#4b5563' }}>Account Name</span>
-                            <span className="font-bold text-sm" style={{ color: '#000000' }}>{payment.accountName || 'Building India Digital'}</span>
-                          </div>
-                          <div>
-                            <span className="font-bold block text-[11px]" style={{ color: '#4b5563' }}>IFSC Code</span>
-                            <span className="font-bold text-sm" style={{ color: '#000000' }}>{payment.ifscCode || 'KARB0000899'}</span>
-                          </div>
-                        </div>
                       </div>
                     </div>
                   )}
@@ -269,68 +242,118 @@ export default function QuotationPreview({ formData, companySettings, containerR
           );
         })}
 
-        {/* VISUAL DIVIDER BEFORE DECLARATION, SIGNATURES & TERMS PAGE */}
+        {/* VISUAL DIVIDER BEFORE DECLARATION & PAYMENT DETAILS PAGE */}
         <div className="text-xs font-bold uppercase tracking-widest my-1 text-center" style={{ color: '#4b5563' }}>
-          — Page {totalPages}: Declaration, Signatures & Terms —
+          — Page {declarationPageNum}: Declaration & Payment Details —
         </div>
 
-        {/* FINAL PAGE: DECLARATION, SIGNATURES & TERMS */}
+        {/* PAGE (M+1): DECLARATION, PAYMENT DETAILS & SIGNATURES */}
         <div
-          id={`pdf-page-${totalPages}`}
-          className="bg-white text-gray-900 shadow-xl border border-gray-300 w-[210mm] min-w-[210mm] min-h-[297mm] h-[297mm] p-6 sm:p-7 font-sans text-xs flex flex-col justify-between overflow-hidden shrink-0"
+          id={`pdf-page-${declarationPageNum}`}
+          className="bg-white text-gray-900 shadow-xl border border-gray-300 w-[210mm] min-w-[210mm] min-h-[297mm] h-[297mm] p-7 sm:p-8 font-sans text-xs flex flex-col justify-between overflow-hidden shrink-0"
           style={{ boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#000000' }}
         >
-          <div className="space-y-2">
-            {/* DECLARATION SECTION */}
-            <div className="space-y-1.5">
-              <div className="font-extrabold text-xs uppercase tracking-wider border-b pb-1 mb-1" style={{ color: '#000000', borderColor: '#111827' }}>Declaration</div>
-              <div
-                className="pdf-prose-content prose max-w-none text-[10px] sm:text-[10.5px] leading-tight font-bold pt-1 [&>ul]:list-disc [&>ul]:pl-4 [&>ul]:my-0.5 [&>p]:mb-1 [&>p]:font-bold [&>li]:font-bold [&>li]:my-0"
-                style={{ color: '#000000', fontWeight: 700 }}
-                dangerouslySetInnerHTML={{ __html: formData.declaration || '' }}
-              />
+          <div className="flex-1 flex flex-col justify-between space-y-6">
+            {/* TOP HALF: PAYMENT DETAILS & DECLARATION */}
+            <div className="space-y-6">
+              {/* PAYMENT DETAILS SECTION */}
+              <div className="space-y-3">
+                <div className="font-extrabold text-xs sm:text-sm uppercase tracking-wider border-b-2 pb-1.5" style={{ color: '#000000', borderColor: '#111827' }}>
+                  Payment Details
+                </div>
+                <div className="grid grid-cols-2 gap-4 text-xs p-4 rounded-lg border-2 border-gray-300" style={{ backgroundColor: '#f9fafb', borderColor: '#9ca3af', color: '#000000' }}>
+                  <div>
+                    <span className="font-bold block text-xs uppercase tracking-wide" style={{ color: '#4b5563' }}>Bank Name</span>
+                    <span className="font-extrabold text-sm sm:text-base" style={{ color: '#000000' }}>{payment.bankName || 'Karnataka Bank (Zirakpur)'}</span>
+                  </div>
+                  <div>
+                    <span className="font-bold block text-xs uppercase tracking-wide" style={{ color: '#4b5563' }}>Account Number</span>
+                    <span className="font-extrabold text-sm sm:text-base font-mono" style={{ color: '#000000' }}>{payment.accountNumber || '0899202400002001'}</span>
+                  </div>
+                  <div>
+                    <span className="font-bold block text-xs uppercase tracking-wide" style={{ color: '#4b5563' }}>Account Name</span>
+                    <span className="font-extrabold text-sm sm:text-base" style={{ color: '#000000' }}>{payment.accountName || 'Building India Digital'}</span>
+                  </div>
+                  <div>
+                    <span className="font-bold block text-xs uppercase tracking-wide" style={{ color: '#4b5563' }}>IFSC Code</span>
+                    <span className="font-extrabold text-sm sm:text-base font-mono" style={{ color: '#000000' }}>{payment.ifscCode || 'KARB0000899'}</span>
+                  </div>
+                </div>
+
+                {/* CHEQUE INSTRUCTION */}
+                <div className="text-center font-extrabold text-xs sm:text-sm tracking-wide pt-1" style={{ color: '#dc2626' }}>
+                  {payment.chequeInstruction || '* Cheques should be drawn in favour of Devine sTudio'}
+                </div>
+              </div>
+
+              {/* DECLARATION SECTION */}
+              <div className="space-y-3 pt-2">
+                <div className="font-extrabold text-xs sm:text-sm uppercase tracking-wider border-b-2 pb-1.5" style={{ color: '#000000', borderColor: '#111827' }}>
+                  Declaration
+                </div>
+                <div
+                  className="pdf-prose-content prose max-w-none text-xs sm:text-[12.5px] leading-relaxed font-bold pt-1 [&>ul]:list-disc [&>ul]:pl-5 [&>ul]:space-y-2 [&>p]:mb-2 [&>p]:font-bold [&>li]:font-bold [&>li]:my-1 [&>li]:leading-normal"
+                  style={{ color: '#000000', fontWeight: 700 }}
+                  dangerouslySetInnerHTML={{ __html: formData.declaration || '' }}
+                />
+              </div>
             </div>
 
-            {/* SIGNATURES SECTION */}
-            <div className="flex justify-between items-end pt-1 pb-1 min-h-[75px]">
+            {/* BOTTOM HALF: SIGNATURES SECTION */}
+            <div className="flex justify-between items-end pt-6 pb-2 min-h-[110px]">
               <div className="space-y-1 text-center flex flex-col items-center">
-                <div className="h-16 w-48"></div>
-                <div className="font-extrabold text-xs uppercase tracking-wider border-t-2 pt-0.5 w-44 text-center" style={{ borderColor: '#000000', color: '#000000' }}>
+                <div className="h-20 w-52"></div>
+                <div className="font-extrabold text-xs sm:text-sm uppercase tracking-wider border-t-2 pt-1.5 w-52 text-center" style={{ borderColor: '#000000', color: '#000000' }}>
                   Client Signature
                 </div>
               </div>
 
               <div className="space-y-1 text-center flex flex-col items-center">
-                <div className="h-16 w-52 flex items-end justify-center overflow-visible">
+                <div className="h-20 w-56 flex items-end justify-center overflow-visible">
                   <img
                     src={company.signature || '/images/signature1.png'}
                     alt="Organisation Signature"
-                    className="h-16 w-auto max-w-full object-contain mx-auto transform scale-[2.5] translate-y-10 origin-bottom"
+                    className="h-20 w-auto max-w-full object-contain mx-auto transform scale-[2.5] translate-y-10 origin-bottom"
                     style={{ filter: 'contrast(240%) brightness(85%)', mixBlendMode: 'multiply' }}
                     onError={(e) => {
                       e.target.style.display = 'none';
                     }}
                   />
                 </div>
-                <div className="font-extrabold text-xs uppercase tracking-wider border-t-2 pt-0.5 w-44 text-center relative z-10" style={{ borderColor: '#000000', color: '#000000' }}>
+                <div className="font-extrabold text-xs sm:text-sm uppercase tracking-wider border-t-2 pt-1.5 w-52 text-center relative z-10" style={{ borderColor: '#000000', color: '#000000' }}>
                   Organisation Signature
                 </div>
               </div>
             </div>
-
-            {/* TERMS & CONDITIONS OF SERVICES */}
-            <div className="border-t-2 border-dashed pt-1 space-y-0.5" style={{ borderColor: '#9ca3af' }}>
-              <div
-                className="pdf-prose-content prose max-w-none text-[9.0px] sm:text-[9.2px] leading-[1.22] font-bold [&>p]:mb-[2px] [&>strong]:text-black [&>strong]:font-extrabold [&>p]:text-black [&>p]:font-bold"
-                style={{ color: '#000000', fontWeight: 700 }}
-                dangerouslySetInnerHTML={{ __html: formData.termsAndConditions || '' }}
-              />
-            </div>
-
           </div>
 
           {/* UNIFORM FOOTER SECTION */}
-          <div className="text-center text-[10px] font-bold pt-1.5 border-t" style={{ borderColor: '#e5e7eb', color: '#6b7280' }}>
+          <div className="text-center text-[10px] font-bold pt-2 border-t" style={{ borderColor: '#e5e7eb', color: '#6b7280' }}>
+            Page {declarationPageNum} of {totalPages}
+          </div>
+        </div>
+
+        {/* VISUAL DIVIDER BEFORE TERMS & CONDITIONS PAGE */}
+        <div className="text-xs font-bold uppercase tracking-widest my-1 text-center" style={{ color: '#4b5563' }}>
+          — Page {totalPages}: Terms & Conditions —
+        </div>
+
+        {/* PAGE (M+2): TERMS & CONDITIONS */}
+        <div
+          id={`pdf-page-${totalPages}`}
+          className="bg-white text-gray-900 shadow-xl border border-gray-300 w-[210mm] min-w-[210mm] min-h-[297mm] h-[297mm] p-6 sm:p-7 font-sans text-xs flex flex-col justify-between overflow-hidden shrink-0"
+          style={{ boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#000000' }}
+        >
+          <div className="flex-1 flex flex-col space-y-2 overflow-hidden">
+            <div
+              className="pdf-prose-content prose max-w-none text-[10.5px] sm:text-[11px] leading-[1.35] font-bold [&>p]:mb-1.5 [&>strong]:text-black [&>strong]:font-extrabold [&>p]:text-black [&>p]:font-bold"
+              style={{ color: '#000000', fontWeight: 700 }}
+              dangerouslySetInnerHTML={{ __html: formData.termsAndConditions || '' }}
+            />
+          </div>
+
+          {/* UNIFORM FOOTER SECTION */}
+          <div className="text-center text-[10px] font-bold pt-2 border-t" style={{ borderColor: '#e5e7eb', color: '#6b7280' }}>
             Page {totalPages} of {totalPages}
           </div>
         </div>
