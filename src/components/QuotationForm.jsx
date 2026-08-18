@@ -38,7 +38,7 @@ const BANK_DETAILS = {
 const INITIAL_FORM_DATA = {
   quotationName: '',
   clientName: '', address: '', contactPerson: '', phone: '',
-  amount: '', baseCurrency: 'INR', displayCurrency: 'INR',
+  amount: '', amountCustomText: '', verticalAlignment: 'top', baseCurrency: 'INR', displayCurrency: 'INR',
   baseAmount: '', isRevised: false, revisionNumber: 0,
   ...BANK_DETAILS
 };
@@ -303,7 +303,7 @@ const formatAmountWithCommas = (amount) => {
     : num.toLocaleString('en-IN', { maximumFractionDigits: 0 });
 };
 
-const HtmlToPdf = ({ html, customStyle }) => {
+const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top' }) => {
   if (!html) return null;
   if (typeof window === 'undefined') return null; // Safe guard for Next.js SSR
   const parser = new window.DOMParser();
@@ -523,8 +523,11 @@ const HtmlToPdf = ({ html, customStyle }) => {
     return null;
   };
 
+  const vAlignMap = { top: 'flex-start', center: 'center', bottom: 'flex-end' };
+  const vJustify = vAlignMap[verticalAlignment] || 'flex-start';
+
   return (
-    <View style={{ padding: 2, width: '100%', justifyContent: 'flex-start' }}>
+    <View style={{ padding: 2, width: '100%', height: '100%', justifyContent: vJustify }}>
       {processChildren(doc.body.childNodes, {})}
     </View>
   );
@@ -640,10 +643,10 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
           {/* Table Header */}
           <View style={styles.tableHeaderRow} fixed>
             <View style={styles.tableHeaderColLeft}>
-              <Text style={styles.tableHeaderCellText}>S.No</Text>
+              <Text style={styles.tableHeaderCellText}>SUBSCRIPTION</Text>
             </View>
             <View style={styles.tableHeaderColRight}>
-              <Text style={styles.tableHeaderCellText}>SUBSCRIPTION</Text>
+              <Text style={styles.tableHeaderCellText}>DESCRIPTION</Text>
             </View>
           </View>
 
@@ -657,16 +660,18 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
               ]}
               wrap={false}
             >
-              <View style={styles.tableBodyColLeft}>
+              <View style={[styles.tableBodyColLeft, { justifyContent: vAlignStyle }]}>
                 <HtmlToPdf
                   html={item.serialNumber}
                   customStyle={{ ...cellStyle, fontFamily: 'Helvetica-Bold', textAlign: 'center' }}
+                  verticalAlignment={formData.verticalAlignment}
                 />
               </View>
-              <View style={styles.tableBodyColRight}>
+              <View style={[styles.tableBodyColRight, { justifyContent: vAlignStyle }]}>
                 <HtmlToPdf
                   html={item.subscription}
                   customStyle={{ ...cellStyle, fontFamily: 'Helvetica' }}
+                  verticalAlignment={formData.verticalAlignment}
                 />
               </View>
             </View>
@@ -675,7 +680,7 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
 
         <View style={{ marginTop: 6 }} wrap={false}>
           <View style={styles.amountSection} wrap={false}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, flexWrap: 'wrap' }}>
               <Text style={[styles.amountText, { fontSize: 14 }]}>AMOUNT</Text>
               <Text style={[styles.amountText, { fontSize: 14 }]}>
                 {formData.displayCurrency} ({CURRENCY_SYMBOLS_PDF[formData.displayCurrency]})
@@ -683,11 +688,16 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
               {formData.amount && <Text style={[styles.amountText, { fontSize: 14, color: '#FF8C00', fontFamily: 'Helvetica-Bold' }]}>
                 {formatAmountWithCommas(formData.amount)}
               </Text>}
+              {formData.amountCustomText && <Text style={[styles.amountText, { fontSize: 13, color: '#2563EB', fontFamily: 'Helvetica-Bold' }]}>
+                - {formData.amountCustomText}
+              </Text>}
             </View>
             {formData.amount && <Text style={[styles.text, { textAlign: 'center', marginTop: 4, fontFamily: 'Helvetica-Bold', fontSize: 11 }]}>
               Amount in words: {numberToWords(formData.amount)}
             </Text>}
-            <Text style={[styles.text, { textAlign: 'center', marginTop: 4, fontFamily: 'Helvetica-Bold', marginBottom: 2 }]}>(GST EXTRA)</Text>
+            <Text style={[styles.text, { textAlign: 'center', marginTop: 4, fontFamily: 'Helvetica-Bold', marginBottom: 2 }]}>
+              (GST EXTRA)
+            </Text>
           </View>
           <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 11, textAlign: 'center', marginTop: 5, color: '#FF0000', marginBottom: 5 }}>
             * Cheques should be drawn in favour of Devine sTudio
@@ -1306,7 +1316,7 @@ const QuotationForm = () => {
 
   const renderSubscriptionContent = (item, field) => {
     const content = item[field];
-    if (!content && isEditing) return <div className="text-gray-500 italic min-h-8 p-1 cursor-pointer">Click to add {field === 'serialNumber' ? 'serial number' : 'details'}...</div>;
+    if (!content && isEditing) return <div className="text-gray-500 italic min-h-8 p-1 cursor-pointer">Click to add {field === 'serialNumber' ? 'subscription' : 'description details'}...</div>;
     if (!content && !isEditing) return <div className="min-h-8 p-1">&nbsp;</div>;
     return <div
       dangerouslySetInnerHTML={{ __html: content }}
@@ -1445,9 +1455,21 @@ const QuotationForm = () => {
                 <input type="text" value={formData.amount} onChange={(e) => handleAmountChange(e.target.value)} className="w-32 border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Enter amount" />
               </div>
               <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-gray-600">Amount Note / Details:</span>
+                <input type="text" value={formData.amountCustomText || ''} onChange={(e) => handleFormChange('amountCustomText', e.target.value)} className="w-48 border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g. 50% Advance / Note" />
+              </div>
+              <div className="flex items-center gap-2">
                 <span className="text-xs font-medium text-gray-600">Currency:</span>
                 <select value={formData.displayCurrency} onChange={(e) => handleCurrencyChange(e.target.value)} className="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                   {Object.keys(CURRENCY_SYMBOLS).map(c => <option key={c} value={c}>{c} ({CURRENCY_SYMBOLS[c]})</option>)}
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-gray-600">Text Vertical Alignment:</span>
+                <select value={formData.verticalAlignment || 'top'} onChange={(e) => handleFormChange('verticalAlignment', e.target.value)} className="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white font-medium">
+                  <option value="top">Top</option>
+                  <option value="center">Center</option>
+                  <option value="bottom">Bottom</option>
                 </select>
               </div>
               {currentQuotationId && (
@@ -1477,8 +1499,7 @@ const QuotationForm = () => {
               {/* Header */}
               <div className="flex justify-between items-start mb-6">
                 <div className="space-y-1 text-sm font-bold">
-                  <div>#246, Devaji vip Plaza, VIP Road</div>
-                  <div>Zirakpur, Punjab Pin : 140603</div>
+                  <div>#246, Devaji vip Plaza, VIP Road, Zirakpur, Punjab Pin : 140603</div>
                   <div className="mt-3">No. {quotationInfo.number}</div>
                   <div>Dated: {quotationInfo.date}</div>
                 </div>
@@ -1525,7 +1546,7 @@ const QuotationForm = () => {
               {/* Subscription Table */}
               <div className="mb-6">
                 <div className="flex justify-between items-center mb-3">
-                  <h3 className="text-base font-bold">SUBSCRIPTION DETAILS</h3>
+                  <h3 className="text-base font-bold">SUBSCRIPTION & DESCRIPTION DETAILS</h3>
                   <button
                     onClick={addSubscriptionItem}
                     className="print:hidden px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 flex items-center gap-1"
@@ -1536,41 +1557,42 @@ const QuotationForm = () => {
                 <table className="w-full text-sm" style={{ border: '1px solid black', tableLayout: 'fixed' }}>
                   <thead>
                     <tr className="bg-gray-100">
-                      <th className="p-2 text-left w-1/5" style={{ border: '1px solid black' }}>S. No.</th>
-                      <th className="p-2 text-left w-3/4" style={{ border: '1px solid black' }}>SUBSCRIPTION</th>
+                      <th className="p-2 text-left w-1/5" style={{ border: '1px solid black' }}>SUBSCRIPTION</th>
+                      <th className="p-2 text-left w-3/4" style={{ border: '1px solid black' }}>DESCRIPTION</th>
                       <th className="print:hidden p-2 text-left w-1/12" style={{ border: '1px solid black' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {subscriptionItems.map((item) => (
-                      <tr key={item.id}>
-                        <td
-                          onClick={() => openTextEditor(item.id, 'serialNumber')}
-                          className={`p-2 align-top ${isEditing ? 'cursor-pointer border-dashed border-blue-400 bg-blue-50' : ''
-                            }`}
-                          style={{ border: '1px solid black', width: '20%' }}
-                        >
-                          {renderSubscriptionContent(item, 'serialNumber')}
-                        </td>
-                        <td
-                          onClick={() => openTextEditor(item.id, 'subscription')}
-                          className={`p-2 align-top ${isEditing ? 'cursor-pointer border-dashed border-blue-400 bg-blue-50' : ''
-                            }`}
-                          style={{ border: '1px solid black', width: '70%' }}
-                        >
-                          {renderSubscriptionContent(item, 'subscription')}
-                        </td>
-                        <td className="print:hidden p-2 text-center" style={{ border: '1px solid black', width: '10%' }}>
-                          <button
-                            onClick={() => removeSubscriptionItem(item.id)}
-                            disabled={subscriptionItems.length === 1}
-                            className="p-1 text-red-500 hover:bg-red-50 rounded disabled:opacity-50"
+                    {subscriptionItems.map((item) => {
+                      const cssVAlign = formData.verticalAlignment === 'center' ? 'middle' : formData.verticalAlignment === 'bottom' ? 'bottom' : 'top';
+                      return (
+                        <tr key={item.id}>
+                          <td
+                            onClick={() => openTextEditor(item.id, 'serialNumber')}
+                            className={`p-2 ${isEditing ? 'cursor-pointer border-dashed border-blue-400 bg-blue-50' : ''}`}
+                            style={{ border: '1px solid black', width: '20%', verticalAlign: cssVAlign }}
                           >
-                            <Trash2 size={12} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                            {renderSubscriptionContent(item, 'serialNumber')}
+                          </td>
+                          <td
+                            onClick={() => openTextEditor(item.id, 'subscription')}
+                            className={`p-2 ${isEditing ? 'cursor-pointer border-dashed border-blue-400 bg-blue-50' : ''}`}
+                            style={{ border: '1px solid black', width: '70%', verticalAlign: cssVAlign }}
+                          >
+                            {renderSubscriptionContent(item, 'subscription')}
+                          </td>
+                          <td className="print:hidden p-2 text-center" style={{ border: '1px solid black', width: '10%', verticalAlign: cssVAlign }}>
+                            <button
+                              onClick={() => removeSubscriptionItem(item.id)}
+                              disabled={subscriptionItems.length === 1}
+                              className="p-1 text-red-500 hover:bg-red-50 rounded disabled:opacity-50"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -1579,12 +1601,20 @@ const QuotationForm = () => {
               <div className="mt-8">
                 {/* Amount */}
                 <div className="mb-6 border-2 border-black p-4 bg-gray-50">
-                  <div className="flex items-center justify-center gap-6">
+                  <div className="flex items-center justify-center gap-6 flex-wrap">
                     <h3 className="text-2xl font-bold">AMOUNT</h3>
                     <span className="text-2xl font-bold">{formData.displayCurrency} ({CURRENCY_SYMBOLS[formData.displayCurrency]})</span>
                     {formData.amount && <span className="text-2xl font-bold">{formatAmountWithCommas(formData.amount)}</span>}
+                    {formData.amountCustomText && (
+                      <span className="text-2xl font-bold text-blue-600">- {formData.amountCustomText}</span>
+                    )}
                   </div>
-                  <div className="text-center text-sm font-semibold mt-2">(GST EXTRA)</div>
+                  {formData.amount && (
+                    <div className="text-center text-sm font-semibold mt-2">
+                      Amount in words: {numberToWords(formData.amount)}
+                    </div>
+                  )}
+                  <div className="text-center text-sm font-semibold mt-1">(GST EXTRA)</div>
                 </div>
                 <div className="text-center text-sm font-bold text-red-600 mb-6">
                   * Cheques should be drawn in favour of Devine sTudio
