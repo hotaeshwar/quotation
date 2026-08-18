@@ -82,7 +82,7 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
   table: {
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: '#000000',
     borderStyle: 'solid',
     width: '100%',
@@ -91,7 +91,7 @@ const styles = StyleSheet.create({
   tableHeaderRow: {
     flexDirection: 'row',
     backgroundColor: '#f0f0f0',
-    borderBottomWidth: 1,
+    borderBottomWidth: 2,
     borderBottomColor: '#000000',
     borderBottomStyle: 'solid',
     minHeight: 24,
@@ -99,7 +99,7 @@ const styles = StyleSheet.create({
   },
   tableHeaderColLeft: {
     width: '20%',
-    borderRightWidth: 1,
+    borderRightWidth: 2,
     borderRightColor: '#000000',
     borderRightStyle: 'solid',
     paddingVertical: 4,
@@ -123,7 +123,7 @@ const styles = StyleSheet.create({
   },
   tableBodyColLeft: {
     width: '20%',
-    borderRightWidth: 1,
+    borderRightWidth: 2,
     borderRightColor: '#000000',
     borderRightStyle: 'solid',
     padding: 4,
@@ -305,7 +305,7 @@ const formatAmountWithCommas = (amount) => {
     : num.toLocaleString('en-IN', { maximumFractionDigits: 0 });
 };
 
-const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top' }) => {
+const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = false, isExtraCompact = false }) => {
   const htmlString = typeof html === 'string' ? html : (html ? String(html) : '');
   if (!htmlString.trim()) return <Text style={customStyle}>{""}</Text>;
   if (typeof window === 'undefined') return <Text style={customStyle}>{""}</Text>;
@@ -325,6 +325,7 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top' }) => {
     }
     if (node.nodeType === 1) {
       const tag = node.tagName.toLowerCase();
+      if (tag === 'br') return '\n';
       let style = { ...inheritedStyle };
 
       const styleAttr = node.getAttribute && node.getAttribute('style');
@@ -355,13 +356,18 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top' }) => {
     return '';
   };
 
+  const blockMargin = isExtraCompact ? 1.0 : (isCompact ? 1.5 : 3.0);
+  const listMargin = isExtraCompact ? 1.5 : (isCompact ? 2.5 : 4.0);
+  const listItemMargin = isExtraCompact ? 0.5 : (isCompact ? 1.0 : 2.0);
+  const fallbackMargin = isExtraCompact ? 0.5 : (isCompact ? 1.0 : 2.0);
+
   // Process block node (returns <View> containing <Text>)
   const renderBlockNode = (node, keyIndex) => {
     if (node.nodeType === 3) {
       const text = node.textContent.trim();
       if (!text) return null;
       return (
-        <View key={`blk-${keyIndex}`} style={{ marginBottom: 2, width: '100%' }}>
+        <View key={`blk-${keyIndex}`} style={{ marginBottom: fallbackMargin, width: '100%' }}>
           <Text style={{ ...customStyle, textAlign: customStyle?.textAlign || 'left' }}>{text}</Text>
         </View>
       );
@@ -369,6 +375,9 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top' }) => {
 
     if (node.nodeType === 1) {
       const tag = node.tagName.toLowerCase();
+      if (tag === 'br') {
+        return <View key={`blk-${keyIndex}`} style={{ height: isExtraCompact ? 3 : 6 }} />;
+      }
       let blockStyle = { ...customStyle };
       let textAlign = customStyle?.textAlign || 'left';
 
@@ -395,10 +404,10 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top' }) => {
           .filter(Boolean);
 
         if (inlineContent.length === 0) {
-          return <View key={`blk-${keyIndex}`} style={{ height: 4 }} />;
+          return <View key={`blk-${keyIndex}`} style={{ height: isExtraCompact ? 2 : 4 }} />;
         }
         return (
-          <View key={`blk-${keyIndex}`} style={{ marginBottom: 3, width: '100%' }}>
+          <View key={`blk-${keyIndex}`} style={{ marginBottom: blockMargin, width: '100%' }}>
             <Text style={{ ...blockStyle, width: '100%', textAlign }}>{inlineContent}</Text>
           </View>
         );
@@ -408,14 +417,14 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top' }) => {
         const listItems = Array.from(node.childNodes).filter(child => child.nodeType === 1 && child.tagName.toLowerCase() === 'li');
         if (listItems.length === 0) return null;
         return (
-          <View key={`blk-${keyIndex}`} style={{ marginBottom: 4, paddingLeft: 10, width: '100%' }}>
+          <View key={`blk-${keyIndex}`} style={{ marginBottom: listMargin, paddingLeft: isExtraCompact ? 6 : 10, width: '100%' }}>
             {listItems.map((liNode, liIdx) => {
               const inlineContent = Array.from(liNode.childNodes)
                 .map((child, idx) => processInlineNode(child, `li-${keyIndex}-${liIdx}-${idx}`, {}))
                 .filter(Boolean);
               return (
-                <View key={`li-row-${keyIndex}-${liIdx}`} style={{ flexDirection: 'row', marginBottom: 2, width: '100%', alignItems: 'flex-start' }}>
-                  <Text style={{ ...blockStyle, width: 'auto', marginRight: 6 }}>{tag === 'ol' ? `${liIdx + 1}.` : '•'}</Text>
+                <View key={`li-row-${keyIndex}-${liIdx}`} style={{ flexDirection: 'row', marginBottom: listItemMargin, width: '100%', alignItems: 'flex-start' }}>
+                  <Text style={{ ...blockStyle, width: 'auto', marginRight: isExtraCompact ? 4 : 6 }}>{tag === 'ol' ? `${liIdx + 1}.` : '•'}</Text>
                   <View style={{ flex: 1 }}>
                     <Text style={{ ...blockStyle, textAlign }}>{inlineContent}</Text>
                   </View>
@@ -432,7 +441,7 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top' }) => {
 
       if (inlineContent.length === 0) return null;
       return (
-        <View key={`blk-${keyIndex}`} style={{ marginBottom: 2, width: '100%' }}>
+        <View key={`blk-${keyIndex}`} style={{ marginBottom: fallbackMargin, width: '100%' }}>
           <Text style={{ ...blockStyle, width: '100%', textAlign }}>{inlineContent}</Text>
         </View>
       );
@@ -458,14 +467,53 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top' }) => {
 
 // PDF Document Component
 const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
+  const getVisibleTextLength = (html) => {
+    if (!html) return 0;
+    const clean = html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/\u00A0/g, ' ');
+    return clean.length;
+  };
+
+  const totalTextLength = subscriptionItems.reduce((acc, item) => {
+    return acc + getVisibleTextLength(item.serialNumber) + getVisibleTextLength(item.subscription);
+  }, 0);
+
+  // Dynamic layout compaction settings
+  const isCompact = totalTextLength > 600 || subscriptionItems.length > 1;
+  const isExtraCompact = totalTextLength > 1200 || subscriptionItems.length > 3;
+
+  const logoWidth = isExtraCompact ? 180 : (isCompact ? 210 : 250);
+  const logoHeight = isExtraCompact ? 50 : (isCompact ? 60 : 72);
+  const headerBottomMargin = isExtraCompact ? 3 : (isCompact ? 5 : 8);
+  const headerRowMargin = isExtraCompact ? 1 : (isCompact ? 2 : 4);
+  const clientInfoMarginBottom = isExtraCompact ? 1 : (isCompact ? 2 : 4);
+  const clientInfoRowMarginBottom = isExtraCompact ? 1 : (isCompact ? 1.5 : 2);
+  const tableMarginBottom = isExtraCompact ? 2 : (isCompact ? 4 : 8);
+  const tableHeaderMinHeight = isExtraCompact ? 16 : (isCompact ? 20 : 24);
+  const tableCellPadding = isExtraCompact ? 2.5 : (isCompact ? 3.5 : 4);
+  const tableFontSize = isExtraCompact ? 8.0 : (isCompact ? 9.0 : 10.0);
+  const amountFontSize = isExtraCompact ? 10.5 : (isCompact ? 12 : 14);
+  const noteFontSize = isExtraCompact ? 9.5 : (isCompact ? 11 : 13);
+  const wordAmountFontSize = isExtraCompact ? 8.5 : (isCompact ? 9.5 : 11);
+  const amountSectionPadding = isExtraCompact ? 2 : (isCompact ? 3 : 4);
+  const spacingMargin = isExtraCompact ? 2.5 : (isCompact ? 5 : 10);
+  const sectionHeaderFont = isExtraCompact ? 9.5 : (isCompact ? 10.5 : 12);
+  const sectionHeaderMarginBottom = isExtraCompact ? 1.5 : (isCompact ? 3 : 4);
+  const paymentLabelFont = isExtraCompact ? 7.5 : (isCompact ? 8.5 : 9);
+  const paymentValFont = isExtraCompact ? 7.5 : (isCompact ? 8.5 : 9);
+  const paymentMarginBottom = isExtraCompact ? 1 : (isCompact ? 2.5 : 4);
+  const declarationTextFont = isExtraCompact ? 7.0 : (isCompact ? 8.0 : 8.5);
+  const declarationItemFont = isExtraCompact ? 6.5 : (isCompact ? 7.5 : 8.0);
+  const declarationItemLineHeight = isExtraCompact ? 1.05 : (isCompact ? 1.1 : 1.15);
+  const signatureSectionMarginTop = isExtraCompact ? 8 : (isCompact ? 15 : 25);
+  const signatureImageWidth = isExtraCompact ? 105 : (isCompact ? 125 : 145);
+  const signatureImageHeight = isExtraCompact ? 45 : (isCompact ? 54 : 62);
+  const signatureLabelFont = isExtraCompact ? 9.5 : (isCompact ? 11 : 12);
+
   const cellStyle = {
     ...styles.tableCell,
-    fontSize: 10.0,
-    lineHeight: 1.2
-  };
-  const cellStyleBold = {
-    ...styles.tableCellBold,
-    fontSize: 10.5
+    fontSize: tableFontSize,
+    lineHeight: 1.15,
+    padding: tableCellPadding
   };
 
   const vAlignMap = {
@@ -476,8 +524,8 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
   const vAlignStyle = vAlignMap[formData?.verticalAlignment || 'top'] || 'flex-start';
 
   const renderPageHeader = () => (
-    <View style={{ marginBottom: 8 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, marginTop: 2 }}>
+    <View style={{ marginBottom: headerBottomMargin }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: headerRowMargin, marginTop: 0 }}>
         {/* Address & Phone Left Section */}
         <View style={{ width: 270 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
@@ -489,48 +537,34 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
               <Text style={{ fontSize: 10.0, fontFamily: 'Helvetica-Bold', lineHeight: 1.2 }}>Zirakpur, Punjab Pin : 140603</Text>
             </View>
           </View>
-          <View style={{ backgroundColor: '#000000', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: 18, width: 260 }}>
+          <View style={{ backgroundColor: '#000000', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: isExtraCompact ? 16 : 18, width: 260 }}>
             <Svg viewBox="0 0 24 24" style={{ width: 10, height: 10, marginRight: 4 }}>
               <Path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" fill="#ffffff" />
             </Svg>
-            <Text style={{ color: '#ffffff', fontSize: 9.5, fontFamily: 'Helvetica-Bold' }}>90414-99964/73</Text>
+            <Text style={{ color: '#ffffff', fontSize: isExtraCompact ? 8.5 : 9.5, fontFamily: 'Helvetica-Bold' }}>90414-99964/73</Text>
           </View>
         </View>
 
         {/* Logo Right Section (Bigger & Aligned in one row with address) */}
-        <View style={{ width: 275, height: 85 }}>
+        <View style={{ width: logoWidth, height: logoHeight }}>
           <Image src={companyLogo} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
         </View>
       </View>
 
       {/* No. & Dated Row */}
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, marginBottom: 4 }}>
-        <Text style={{ fontSize: 10.5, fontFamily: 'Helvetica-Bold' }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: headerRowMargin, marginBottom: headerRowMargin }}>
+        <Text style={{ fontSize: isExtraCompact ? 9.5 : (isCompact ? 10.0 : 10.5), fontFamily: 'Helvetica-Bold' }}>
           No. {quotationInfo.number}
         </Text>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <Text style={{ fontSize: 10.5, fontFamily: 'Helvetica-Bold', marginRight: 10 }}>Dated</Text>
-          <View style={{ borderBottomWidth: 1, borderColor: '#000000', width: 130, alignItems: 'center' }}>
-            <Text style={{ fontSize: 10.5, fontFamily: 'Helvetica-Bold', marginBottom: 2 }}>{quotationInfo.date}</Text>
+          <Text style={{ fontSize: isExtraCompact ? 9.5 : (isCompact ? 10.0 : 10.5), fontFamily: 'Helvetica-Bold', marginRight: 10 }}>Dated</Text>
+          <View style={{ borderBottomWidth: 1, borderColor: '#000000', width: isExtraCompact ? 100 : 130, alignItems: 'center' }}>
+            <Text style={{ fontSize: isExtraCompact ? 9.5 : (isCompact ? 10.0 : 10.5), fontFamily: 'Helvetica-Bold', marginBottom: 2 }}>{quotationInfo.date}</Text>
           </View>
         </View>
       </View>
     </View>
   );
-
-  // Helper to count characters of only visible text (ignoring HTML tag overhead)
-  const getVisibleTextLength = (html) => {
-    if (!html) return 0;
-    const clean = html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/\u00A0/g, ' ');
-    return clean.length;
-  };
-
-  const getDynamicFontSize = (chars) => {
-    if (chars > 2200) return 9.0;
-    if (chars > 1500) return 10.2;
-    if (chars > 1000) return 10.5;
-    return 11.0;
-  };
 
   return (
     <Document>
@@ -539,22 +573,22 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
           {renderPageHeader()}
         </View>
 
-        <View style={{ marginBottom: 4 }}>
+        <View style={{ marginBottom: clientInfoMarginBottom }}>
           {/* Business Name Row */}
-          <View style={{ flexDirection: 'row', alignItems: 'flex-end', marginBottom: 2 }}>
-            <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', width: 90 }}>Business Name</Text>
-            <View style={{ borderBottomWidth: 1, borderColor: '#000000', flex: 1, paddingBottom: 2 }}>
-              <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold' }} maxLines={1}>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-end', marginBottom: clientInfoRowMarginBottom }}>
+            <Text style={{ fontSize: isExtraCompact ? 9 : 10, fontFamily: 'Helvetica-Bold', width: 90 }}>Business Name</Text>
+            <View style={{ borderBottomWidth: 1, borderColor: '#000000', flex: 1, paddingBottom: clientInfoRowMarginBottom }}>
+              <Text style={{ fontSize: isExtraCompact ? 9 : 10, fontFamily: 'Helvetica-Bold' }} maxLines={1}>
                 {(formData.clientName || '').replace(/[\r\n]+/g, ' ').trim()}
               </Text>
             </View>
           </View>
 
           {/* Address Row */}
-          <View style={{ flexDirection: 'row', alignItems: 'flex-end', marginBottom: 2 }}>
-            <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', width: 90 }}>Address</Text>
-            <View style={{ borderBottomWidth: 1, borderColor: '#000000', flex: 1, paddingBottom: 2 }}>
-              <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold' }} maxLines={1}>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-end', marginBottom: clientInfoRowMarginBottom }}>
+            <Text style={{ fontSize: isExtraCompact ? 9 : 10, fontFamily: 'Helvetica-Bold', width: 90 }}>Address</Text>
+            <View style={{ borderBottomWidth: 1, borderColor: '#000000', flex: 1, paddingBottom: clientInfoRowMarginBottom }}>
+              <Text style={{ fontSize: isExtraCompact ? 9 : 10, fontFamily: 'Helvetica-Bold' }} maxLines={1}>
                 {(formData.address || '').replace(/[\r\n]+/g, ', ').trim()}
               </Text>
             </View>
@@ -563,17 +597,17 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
           {/* Contact & Phone Row */}
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
             <View style={{ flexDirection: 'row', alignItems: 'flex-end', width: '48%' }}>
-              <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', width: 90 }}>Contact Person</Text>
-              <View style={{ borderBottomWidth: 1, borderColor: '#000000', flex: 1, paddingBottom: 2 }}>
-                <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold' }} maxLines={1}>
+              <Text style={{ fontSize: isExtraCompact ? 9 : 10, fontFamily: 'Helvetica-Bold', width: 90 }}>Contact Person</Text>
+              <View style={{ borderBottomWidth: 1, borderColor: '#000000', flex: 1, paddingBottom: clientInfoRowMarginBottom }}>
+                <Text style={{ fontSize: isExtraCompact ? 9 : 10, fontFamily: 'Helvetica-Bold' }} maxLines={1}>
                   {(formData.contactPerson || '').replace(/[\r\n]+/g, ' ').trim()}
                 </Text>
               </View>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'flex-end', width: '48%' }}>
-              <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', width: 90 }}>Phone/Mobile</Text>
-              <View style={{ borderBottomWidth: 1, borderColor: '#000000', flex: 1, paddingBottom: 2 }}>
-                <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold' }} maxLines={1}>
+              <Text style={{ fontSize: isExtraCompact ? 9 : 10, fontFamily: 'Helvetica-Bold', width: 90 }}>Phone/Mobile</Text>
+              <View style={{ borderBottomWidth: 1, borderColor: '#000000', flex: 1, paddingBottom: clientInfoRowMarginBottom }}>
+                <Text style={{ fontSize: isExtraCompact ? 9 : 10, fontFamily: 'Helvetica-Bold' }} maxLines={1}>
                   {(formData.phone || '').replace(/[\r\n]+/g, ' ').trim()}
                 </Text>
               </View>
@@ -581,128 +615,138 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
           </View>
         </View>
 
-        <View style={styles.table}>
-          {/* Table Header */}
-          <View style={styles.tableHeaderRow}>
-            <View style={styles.tableHeaderColLeft}>
-              <Text style={styles.tableHeaderCellText}>SUBSCRIPTION</Text>
+        {/* Subscription Tables (Independent blocks that carry their headers on page break) */}
+        {subscriptionItems.map((item, index) => (
+          <View
+            key={`table-block-${index}`}
+            style={[styles.table, { marginBottom: tableMarginBottom }]}
+            wrap={false}
+          >
+            {/* Table Header */}
+            <View style={[styles.tableHeaderRow, { minHeight: tableHeaderMinHeight }]}>
+              <View style={styles.tableHeaderColLeft}>
+                <Text style={[styles.tableHeaderCellText, { fontSize: tableFontSize }]}>SUBSCRIPTION</Text>
+              </View>
+              <View style={styles.tableHeaderColRight}>
+                <Text style={[styles.tableHeaderCellText, { fontSize: tableFontSize }]}>DESCRIPTION</Text>
+              </View>
             </View>
-            <View style={styles.tableHeaderColRight}>
-              <Text style={styles.tableHeaderCellText}>DESCRIPTION</Text>
-            </View>
-          </View>
 
-          {/* Table Body Content Rows */}
-          {subscriptionItems.map((item, index) => (
-            <View
-              key={`row-${index}`}
-              style={[
-                styles.tableBodyRow,
-                index < subscriptionItems.length - 1 ? { borderBottomWidth: 1, borderBottomColor: '#000000', borderBottomStyle: 'solid' } : {}
-              ]}
-            >
-              <View style={[styles.tableBodyColLeft, { justifyContent: vAlignStyle }]}>
+            {/* Table Content Row */}
+            <View style={styles.tableBodyRow}>
+              <View style={[styles.tableBodyColLeft, { justifyContent: vAlignStyle, padding: tableCellPadding }]}>
                 <HtmlToPdf
                   html={item.serialNumber}
                   customStyle={{ ...cellStyle, fontFamily: 'Helvetica-Bold', textAlign: 'center' }}
                   verticalAlignment={formData.verticalAlignment}
+                  isCompact={isCompact}
+                  isExtraCompact={isExtraCompact}
                 />
               </View>
-              <View style={[styles.tableBodyColRight, { justifyContent: vAlignStyle }]}>
+              <View style={[styles.tableBodyColRight, { justifyContent: vAlignStyle, padding: tableCellPadding }]}>
                 <HtmlToPdf
                   html={item.subscription}
                   customStyle={{ ...cellStyle, fontFamily: 'Helvetica' }}
                   verticalAlignment={formData.verticalAlignment}
+                  isCompact={isCompact}
+                  isExtraCompact={isExtraCompact}
                 />
               </View>
             </View>
-          ))}
-        </View>
+          </View>
+        ))}
 
-        <View style={{ marginTop: 6 }} wrap={false}>
-          <View style={styles.amountSection} wrap={false}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <Text style={[styles.amountText, { fontSize: 14 }]}>AMOUNT</Text>
-              <Text style={[styles.amountText, { fontSize: 14 }]}>
-                {formData.displayCurrency} ({CURRENCY_SYMBOLS_PDF[formData.displayCurrency]})
-              </Text>
+        <View style={{ marginTop: isExtraCompact ? 2 : 6 }}>
+          {/* Group 1: Amount Section & Cheques Note */}
+          <View wrap={false}>
+            <View style={[styles.amountSection, { padding: amountSectionPadding, marginTop: isExtraCompact ? 0 : 2, marginBottom: isExtraCompact ? 0 : 2 }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <Text style={[styles.amountText, { fontSize: amountFontSize }]}>AMOUNT</Text>
+                <Text style={[styles.amountText, { fontSize: amountFontSize }]}>
+                  {formData.displayCurrency} ({CURRENCY_SYMBOLS_PDF[formData.displayCurrency]})
+                </Text>
+                {formData.amount ? (
+                  <Text style={[styles.amountText, { fontSize: amountFontSize, color: '#FF8C00', fontFamily: 'Helvetica-Bold' }]}>
+                    {formatAmountWithCommas(formData.amount)}
+                  </Text>
+                ) : <Text style={styles.amountText}>{""}</Text>}
+                {formData.amountCustomText ? (
+                  <Text style={[styles.amountText, { fontSize: noteFontSize, color: '#2563EB', fontFamily: 'Helvetica-Bold' }]}>
+                    - {formData.amountCustomText}
+                  </Text>
+                ) : <Text style={styles.amountText}>{""}</Text>}
+              </View>
               {formData.amount ? (
-                <Text style={[styles.amountText, { fontSize: 14, color: '#FF8C00', fontFamily: 'Helvetica-Bold' }]}>
-                  {formatAmountWithCommas(formData.amount)}
+                <Text style={[styles.text, { textAlign: 'center', marginTop: isExtraCompact ? 1 : 4, fontFamily: 'Helvetica-Bold', fontSize: wordAmountFontSize }]}>
+                  Amount in words: {numberToWords(formData.amount)}
                 </Text>
-              ) : <Text style={styles.amountText}>{""}</Text>}
-              {formData.amountCustomText ? (
-                <Text style={[styles.amountText, { fontSize: 13, color: '#2563EB', fontFamily: 'Helvetica-Bold' }]}>
-                  - {formData.amountCustomText}
-                </Text>
-              ) : <Text style={styles.amountText}>{""}</Text>}
-            </View>
-            {formData.amount ? (
-              <Text style={[styles.text, { textAlign: 'center', marginTop: 4, fontFamily: 'Helvetica-Bold', fontSize: 11 }]}>
-                Amount in words: {numberToWords(formData.amount)}
+              ) : <Text style={styles.text}>{""}</Text>}
+              <Text style={[styles.text, { textAlign: 'center', marginTop: isExtraCompact ? 1 : 4, fontFamily: 'Helvetica-Bold', marginBottom: isExtraCompact ? 1 : 2, fontSize: wordAmountFontSize }]}>
+                (GST EXTRA)
               </Text>
-            ) : <Text style={styles.text}>{""}</Text>}
-            <Text style={[styles.text, { textAlign: 'center', marginTop: 4, fontFamily: 'Helvetica-Bold', marginBottom: 2 }]}>
-              (GST EXTRA)
+            </View>
+            <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: wordAmountFontSize, textAlign: 'center', marginTop: isExtraCompact ? 2 : 5, color: '#FF0000', marginBottom: isExtraCompact ? 2 : 5 }}>
+              * Cheques should be drawn in favour of Devine sTudio
             </Text>
           </View>
-          <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 11, textAlign: 'center', marginTop: 5, color: '#FF0000', marginBottom: 5 }}>
-            * Cheques should be drawn in favour of Devine sTudio
-          </Text>
 
-          <View style={{ marginBottom: 10, marginTop: 10 }} wrap={false}>
-            <Text style={[styles.sectionHeader, { marginTop: 0, marginBottom: 4 }]}>PAYMENT DETAILS</Text>
+          {/* Group 2: Payment Details */}
+          <View style={{ marginBottom: spacingMargin, marginTop: spacingMargin }} wrap={false}>
+            <Text style={[styles.sectionHeader, { fontSize: sectionHeaderFont, marginTop: 0, marginBottom: sectionHeaderMarginBottom }]}>PAYMENT DETAILS</Text>
             <View style={styles.paymentGrid}>
-              <View style={styles.paymentItem}>
-                <Text style={styles.paymentLabel}>Bank Name</Text>
-                <Text style={styles.paymentValue}>{formData.bankName}</Text>
+              <View style={[styles.paymentItem, { marginBottom: paymentMarginBottom }]}>
+                <Text style={[styles.paymentLabel, { fontSize: paymentLabelFont }]}>Bank Name</Text>
+                <Text style={[styles.paymentValue, { fontSize: paymentValFont }]}>{formData.bankName}</Text>
               </View>
-              <View style={styles.paymentItem}>
-                <Text style={styles.paymentLabel}>Account Number</Text>
-                <Text style={styles.paymentValue}>{formData.accountNumber}</Text>
+              <View style={[styles.paymentItem, { marginBottom: paymentMarginBottom }]}>
+                <Text style={[styles.paymentLabel, { fontSize: paymentLabelFont }]}>Account Number</Text>
+                <Text style={[styles.paymentValue, { fontSize: paymentValFont }]}>{formData.accountNumber}</Text>
               </View>
-              <View style={styles.paymentItem}>
-                <Text style={styles.paymentLabel}>Account Name</Text>
-                <Text style={styles.paymentValue}>{formData.accountName}</Text>
+              <View style={[styles.paymentItem, { marginBottom: paymentMarginBottom }]}>
+                <Text style={[styles.paymentLabel, { fontSize: paymentLabelFont }]}>Account Name</Text>
+                <Text style={[styles.paymentValue, { fontSize: paymentValFont }]}>{formData.accountName}</Text>
               </View>
-              <View style={styles.paymentItem}>
-                <Text style={styles.paymentLabel}>IFSC Code</Text>
-                <Text style={styles.paymentValue}>{formData.ifscCode}</Text>
+              <View style={[styles.paymentItem, { marginBottom: paymentMarginBottom }]}>
+                <Text style={[styles.paymentLabel, { fontSize: paymentLabelFont }]}>IFSC Code</Text>
+                <Text style={[styles.paymentValue, { fontSize: paymentValFont }]}>{formData.ifscCode}</Text>
               </View>
             </View>
           </View>
 
-          <View style={{ marginBottom: 10, marginTop: 10 }} wrap={false}>
-            <Text style={[styles.sectionHeader, { marginTop: 0, marginBottom: 4 }]}>DECLARATION</Text>
-            <Text style={[styles.declarationText, { marginBottom: 4 }]}>
-              This is an application for Promotional services to BUILDING INDIA DIGITAL.
-            </Text>
-            {[
-              "All information including text & picture to be provided by the client.",
-              "BUILDING INDIA DIGITAL shall not be liable for any claims/damages.",
-              "Work shall commence only after clearance of cheques/pay order.",
-              "We are not responsible for future changes if business page already made by client.",
-              "BUILDING INDIA DIGITAL will take 60 days to complete the services/work.",
-              "After work starts there will be No Claim & No Refund.",
-              "Payment covered under 'Advertising Contract' u/s 194C. TDS @2% if applicable.",
-              "I allow BUILDING INDIA DIGITAL to make commercial calls to my mobile number(s).",
-              "This declaration holds valid even if numbers registered for NDNC."
-            ].map((item, index) => (
-              <Text key={index} style={styles.declarationItem}>• {item}</Text>
-            ))}
-          </View>
-
-          <View style={[styles.signatureSection, { marginTop: 25, minHeight: 45 }]} wrap={false}>
-            <View style={styles.signatureBox}>
-              <Text style={styles.signatureLabel}>CLIENT SIGNATURE</Text>
-              <View style={{ height: 20, justifyContent: 'flex-end', alignItems: 'flex-start', marginTop: 0 }}>
-                <Text style={styles.text}></Text>
-              </View>
+          {/* Group 3: Declaration & Signatures Grouped Together */}
+          <View wrap={false} style={{ marginTop: spacingMargin }}>
+            <View style={{ marginBottom: spacingMargin }}>
+              <Text style={[styles.sectionHeader, { fontSize: sectionHeaderFont, marginTop: 0, marginBottom: sectionHeaderMarginBottom }]}>DECLARATION</Text>
+              <Text style={[styles.declarationText, { fontSize: declarationTextFont, marginBottom: isExtraCompact ? 2 : 4 }]}>
+                This is an application for Promotional services to BUILDING INDIA DIGITAL.
+              </Text>
+              {[
+                "All information including text & picture to be provided by the client.",
+                "BUILDING INDIA DIGITAL shall not be liable for any claims/damages.",
+                "Work shall commence only after clearance of cheques/pay order.",
+                "We are not responsible for future changes if business page already made by client.",
+                "BUILDING INDIA DIGITAL will take 60 days to complete the services/work.",
+                "After work starts there will be No Claim & No Refund.",
+                "Payment covered under 'Advertising Contract' u/s 194C. TDS @2% if applicable.",
+                "I allow BUILDING INDIA DIGITAL to make commercial calls to my mobile number(s).",
+                "This declaration holds valid even if numbers registered for NDNC."
+              ].map((item, index) => (
+                <Text key={index} style={[styles.declarationItem, { fontSize: declarationItemFont, lineHeight: declarationItemLineHeight, marginBottom: isExtraCompact ? 0.2 : 1 }]}>• {item}</Text>
+              ))}
             </View>
-            <View style={styles.signatureBox}>
-              <Text style={styles.signatureLabel}>ORGANISATION SIGNATURE</Text>
-              <View style={{ marginTop: 2, alignItems: 'flex-start' }}>
-                <Image src={signatureImage} style={styles.signatureImage} />
+
+            <View style={[styles.signatureSection, { marginTop: signatureSectionMarginTop, minHeight: isExtraCompact ? 35 : 45 }]}>
+              <View style={styles.signatureBox}>
+                <Text style={[styles.signatureLabel, { fontSize: signatureLabelFont }]}>CLIENT SIGNATURE</Text>
+                <View style={{ height: 20, justifyContent: 'flex-end', alignItems: 'flex-start', marginTop: 0 }}>
+                  <Text style={styles.text}></Text>
+                </View>
+              </View>
+              <View style={styles.signatureBox}>
+                <Text style={[styles.signatureLabel, { fontSize: signatureLabelFont }]}>ORGANISATION SIGNATURE</Text>
+                <View style={{ marginTop: isExtraCompact ? 0 : 2, alignItems: 'flex-start' }}>
+                  <Image src={signatureImage} style={[styles.signatureImage, { width: signatureImageWidth, height: signatureImageHeight }]} />
+                </View>
               </View>
             </View>
           </View>
@@ -1534,12 +1578,12 @@ const QuotationForm = () => {
                     <Plus size={12} /> Add
                   </button>
                 </div>
-                <table className="w-full text-sm" style={{ border: '1px solid black', tableLayout: 'fixed' }}>
+                <table className="w-full text-sm" style={{ border: '2px solid black', tableLayout: 'fixed' }}>
                   <thead>
                     <tr className="bg-gray-100">
-                      <th className="p-2 text-left w-1/5" style={{ border: '1px solid black' }}>SUBSCRIPTION</th>
-                      <th className="p-2 text-left w-3/4" style={{ border: '1px solid black' }}>DESCRIPTION</th>
-                      <th className="print:hidden p-2 text-left w-1/12" style={{ border: '1px solid black' }}>Actions</th>
+                      <th className="p-2 text-left w-1/5" style={{ border: '2px solid black' }}>SUBSCRIPTION</th>
+                      <th className="p-2 text-left w-3/4" style={{ border: '2px solid black' }}>DESCRIPTION</th>
+                      <th className="print:hidden p-2 text-left w-1/12" style={{ border: '2px solid black' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1550,18 +1594,18 @@ const QuotationForm = () => {
                           <td
                             onClick={() => openTextEditor(item.id, 'serialNumber')}
                             className={`p-2 ${isEditing ? 'cursor-pointer border-dashed border-blue-400 bg-blue-50' : ''}`}
-                            style={{ border: '1px solid black', width: '20%', verticalAlign: cssVAlign }}
+                            style={{ border: '2px solid black', width: '20%', verticalAlign: cssVAlign }}
                           >
                             {renderSubscriptionContent(item, 'serialNumber')}
                           </td>
                           <td
                             onClick={() => openTextEditor(item.id, 'subscription')}
                             className={`p-2 ${isEditing ? 'cursor-pointer border-dashed border-blue-400 bg-blue-50' : ''}`}
-                            style={{ border: '1px solid black', width: '70%', verticalAlign: cssVAlign }}
+                            style={{ border: '2px solid black', width: '70%', verticalAlign: cssVAlign }}
                           >
                             {renderSubscriptionContent(item, 'subscription')}
                           </td>
-                          <td className="print:hidden p-2 text-center" style={{ border: '1px solid black', width: '10%', verticalAlign: cssVAlign }}>
+                          <td className="print:hidden p-2 text-center" style={{ border: '2px solid black', width: '10%', verticalAlign: cssVAlign }}>
                             <button
                               onClick={() => removeSubscriptionItem(item.id)}
                               disabled={subscriptionItems.length === 1}
