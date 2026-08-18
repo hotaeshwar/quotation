@@ -471,6 +471,13 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
     fontSize: 10.5
   };
 
+  const vAlignMap = {
+    top: 'flex-start',
+    center: 'center',
+    bottom: 'flex-end'
+  };
+  const vAlignStyle = vAlignMap[formData?.verticalAlignment || 'top'] || 'flex-start';
+
   const renderPageHeader = () => (
     <View style={{ marginBottom: 8 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, marginTop: 2 }}>
