@@ -449,11 +449,8 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top' }) => {
     return <Text style={customStyle}>{""}</Text>;
   }
 
-  const vAlignMap = { top: 'flex-start', center: 'center', bottom: 'flex-end' };
-  const vJustify = vAlignMap[verticalAlignment] || 'flex-start';
-
   return (
-    <View style={{ padding: 2, width: '100%', flex: 1, justifyContent: vJustify }}>
+    <View style={{ padding: 2, width: '100%' }}>
       {blockNodes}
     </View>
   );
@@ -586,7 +583,7 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
 
         <View style={styles.table}>
           {/* Table Header */}
-          <View style={styles.tableHeaderRow} fixed>
+          <View style={styles.tableHeaderRow}>
             <View style={styles.tableHeaderColLeft}>
               <Text style={styles.tableHeaderCellText}>SUBSCRIPTION</Text>
             </View>
@@ -603,7 +600,6 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
                 styles.tableBodyRow,
                 index < subscriptionItems.length - 1 ? { borderBottomWidth: 1, borderBottomColor: '#000000', borderBottomStyle: 'solid' } : {}
               ]}
-              wrap={false}
             >
               <View style={[styles.tableBodyColLeft, { justifyContent: vAlignStyle }]}>
                 <HtmlToPdf
