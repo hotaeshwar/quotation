@@ -50,7 +50,7 @@ export default function QuotationPreview({ formData, companySettings, containerR
   };
 
   const itemChunks = chunkArray(items);
-  const totalPages = itemChunks.length + 2; // +1 for Declaration & Payment Details, +1 for Terms & Conditions
+  const totalPages = itemChunks.length + 2; // Fixed: 1 page for Declaration & Payment, 1 page for Terms & Conditions
 
   const renderHeader = () => (
     <div className="flex flex-col sm:flex-row justify-between items-start pb-1 gap-4">
@@ -335,25 +335,25 @@ export default function QuotationPreview({ formData, companySettings, containerR
 
         {/* VISUAL DIVIDER BEFORE TERMS & CONDITIONS PAGE */}
         <div className="text-xs font-bold uppercase tracking-widest my-1 text-center" style={{ color: '#4b5563' }}>
-          — Page {totalPages}: Terms & Conditions —
+          — Page {totalPages}: Terms &amp; Conditions —
         </div>
 
-        {/* PAGE (M+2): TERMS & CONDITIONS */}
+        {/* PAGE (M+2): TERMS & CONDITIONS (FIXED 1 SINGLE PAGE - SINGLE COLUMN STACKED) */}
         <div
           id={`pdf-page-${totalPages}`}
-          className="bg-white text-gray-900 shadow-xl border border-gray-300 w-[210mm] min-w-[210mm] min-h-[297mm] h-[297mm] p-6 sm:p-7 font-sans text-xs flex flex-col justify-between overflow-hidden shrink-0"
+          className="bg-white text-gray-900 shadow-xl border border-gray-300 w-[210mm] min-w-[210mm] min-h-[297mm] h-[297mm] p-5 sm:p-5.5 font-sans text-xs flex flex-col justify-between overflow-hidden shrink-0"
           style={{ boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#000000' }}
         >
-          <div className="flex-1 flex flex-col space-y-2 overflow-hidden">
+          <div className="flex-1 flex flex-col overflow-hidden">
             <div
-              className="pdf-prose-content prose max-w-none text-[10.5px] sm:text-[11px] leading-[1.35] font-bold [&>p]:mb-1.5 [&>strong]:text-black [&>strong]:font-extrabold [&>p]:text-black [&>p]:font-bold"
+              className="pdf-prose-content prose max-w-none text-[10px] sm:text-[10.5px] leading-[1.28] font-bold [&>p]:mb-[2.5px] [&>p:first-child]:mb-3 [&>strong]:text-black [&>strong]:font-extrabold [&>p]:text-black [&>p]:font-bold"
               style={{ color: '#000000', fontWeight: 700 }}
               dangerouslySetInnerHTML={{ __html: formData.termsAndConditions || '' }}
             />
           </div>
 
           {/* UNIFORM FOOTER SECTION */}
-          <div className="text-center text-[10px] font-bold pt-2 border-t" style={{ borderColor: '#e5e7eb', color: '#6b7280' }}>
+          <div className="text-center text-[10px] font-bold pt-1.5 border-t" style={{ borderColor: '#e5e7eb', color: '#6b7280' }}>
             Page {totalPages} of {totalPages}
           </div>
         </div>

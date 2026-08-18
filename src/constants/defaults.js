@@ -64,6 +64,7 @@ export const DEFAULT_TERMS_AND_CONDITIONS = `
 <p>10.1 The agreement, its validity, construction, interpretation, effect, performance and termination shall be governed by the laws (both substantive and procedural) as applicable in India from time to time.</p>
 <p>10.2 Any dispute or difference arising out of or in connection with this agreement including its interpretation thereof between BUILDING INDIA DIGITAL and customer shall be subject to the exclusive jurisdiction of the courts of Mohali (Punjab) only.</p>
 <p><strong>11. ABOVE PACKAGE IS FOR 1 ID ONLY</strong></p>
+<p>11.1 The package pricing and services detailed in this agreement are applicable for 1 social media ID / account only.</p>
 `.trim();
 
 export const CURRENCIES = [
