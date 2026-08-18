@@ -306,8 +306,8 @@ const formatAmountWithCommas = (amount) => {
 };
 
 const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top' }) => {
-  if (!html) return null;
-  if (typeof window === 'undefined') return null; // Safe guard for Next.js SSR
+  if (!html) return <Text style={customStyle}>{""}</Text>;
+  if (typeof window === 'undefined') return <Text style={customStyle}>{""}</Text>; // Safe guard for Next.js SSR
   const parser = new window.DOMParser();
   const doc = parser.parseFromString(html, 'text/html');
   const fs = customStyle?.fontSize || 10.5;
@@ -332,7 +332,7 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top' }) => {
   const renderNode = (node, index, inheritedStyle = {}) => {
     if (node.nodeType === 3) {
       const text = node.textContent;
-      if (!text.trim() && text.includes('\n')) return null;
+      if (!text.trim() && text.includes('\n')) return '';
       return text.replace(/&nbsp;/g, '\u00A0');
     }
     if (node.nodeType === 1) {
@@ -466,7 +466,7 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top' }) => {
               }
               const rendered = renderNode(child, i, style);
               if (typeof rendered === 'string' || typeof rendered === 'number') {
-                if (!String(rendered).trim()) return null;
+                if (!String(rendered).trim()) return <Text key={`str-${i}`} style={{ ...customStyle, ...style }}>{""}</Text>;
                 return (
                   <Text key={`str-${i}`} style={{ ...customStyle, ...style, width: '100%', textAlign: style.textAlign || customStyle.textAlign || 'left' }}>
                     {rendered}
@@ -522,7 +522,7 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top' }) => {
       const children = Array.from(node.childNodes).map((child, i) => renderNode(child, i, style));
       return <Text key={index} style={{ ...customStyle, ...style, textAlign: style.textAlign || customStyle.textAlign || 'left' }}>{children}</Text>;
     }
-    return null;
+    return <Text key={index} style={{ ...customStyle, ...style }}>{""}</Text>;
   };
 
   const vAlignMap = { top: 'flex-start', center: 'center', bottom: 'flex-end' };
@@ -699,16 +699,22 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
               <Text style={[styles.amountText, { fontSize: 14 }]}>
                 {formData.displayCurrency} ({CURRENCY_SYMBOLS_PDF[formData.displayCurrency]})
               </Text>
-              {formData.amount && <Text style={[styles.amountText, { fontSize: 14, color: '#FF8C00', fontFamily: 'Helvetica-Bold' }]}>
-                {formatAmountWithCommas(formData.amount)}
-              </Text>}
-              {formData.amountCustomText && <Text style={[styles.amountText, { fontSize: 13, color: '#2563EB', fontFamily: 'Helvetica-Bold' }]}>
-                - {formData.amountCustomText}
-              </Text>}
+              {formData.amount ? (
+                <Text style={[styles.amountText, { fontSize: 14, color: '#FF8C00', fontFamily: 'Helvetica-Bold' }]}>
+                  {formatAmountWithCommas(formData.amount)}
+                </Text>
+              ) : <Text style={styles.amountText}>{""}</Text>}
+              {formData.amountCustomText ? (
+                <Text style={[styles.amountText, { fontSize: 13, color: '#2563EB', fontFamily: 'Helvetica-Bold' }]}>
+                  - {formData.amountCustomText}
+                </Text>
+              ) : <Text style={styles.amountText}>{""}</Text>}
             </View>
-            {formData.amount && <Text style={[styles.text, { textAlign: 'center', marginTop: 4, fontFamily: 'Helvetica-Bold', fontSize: 11 }]}>
-              Amount in words: {numberToWords(formData.amount)}
-            </Text>}
+            {formData.amount ? (
+              <Text style={[styles.text, { textAlign: 'center', marginTop: 4, fontFamily: 'Helvetica-Bold', fontSize: 11 }]}>
+                Amount in words: {numberToWords(formData.amount)}
+              </Text>
+            ) : <Text style={styles.text}>{""}</Text>}
             <Text style={[styles.text, { textAlign: 'center', marginTop: 4, fontFamily: 'Helvetica-Bold', marginBottom: 2 }]}>
               (GST EXTRA)
             </Text>
