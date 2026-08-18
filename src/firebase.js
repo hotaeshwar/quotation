@@ -1,4 +1,4 @@
-import { initializeApp, getApps, getApp } from "firebase/app";
+import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -10,7 +10,7 @@ const firebaseConfig = {
   appId: "1:433972823647:web:e949a61528228ee32d3dea"
 };
 
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 export { app, db };
