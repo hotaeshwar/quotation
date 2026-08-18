@@ -127,12 +127,14 @@ const styles = StyleSheet.create({
     borderRightColor: '#000000',
     borderRightStyle: 'solid',
     padding: 4,
+    flexDirection: 'column',
     justifyContent: 'flex-start',
     alignItems: 'center',
   },
   tableBodyColRight: {
     width: '80%',
     padding: 4,
+    flexDirection: 'column',
     justifyContent: 'flex-start',
   },
   tableCell: {
@@ -527,7 +529,7 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top' }) => {
   const vJustify = vAlignMap[verticalAlignment] || 'flex-start';
 
   return (
-    <View style={{ padding: 2, width: '100%', height: '100%', justifyContent: vJustify }}>
+    <View style={{ padding: 2, width: '100%', flex: 1, justifyContent: vJustify }}>
       {processChildren(doc.body.childNodes, {})}
     </View>
   );
