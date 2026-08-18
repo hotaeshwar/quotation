@@ -272,16 +272,16 @@ export default function QuotationForm() {
     <div className="min-h-screen bg-gray-100 flex flex-col">
 
       {/* TOP NAVBAR */}
-      <header className="bg-gray-900 text-white px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-4 border-b border-gray-800 sticky top-0 z-40 shadow-md">
+      <header className="bg-white text-gray-900 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-4 border-b border-gray-200 sticky top-0 z-40 shadow-sm">
         <div className="flex items-center gap-3">
           <img
             src="/images/bid.png"
             alt="BiD Logo"
-            className="h-10 w-auto object-contain rounded-lg bg-white/10 p-1 border border-white/20 shadow-xs"
+            className="h-10 w-auto object-contain p-0.5"
           />
           <div>
-            <h1 className="font-bold text-base tracking-tight leading-none">Quotation Studio</h1>
-            <p className="text-[11px] text-gray-400">BUILDING INDIA DIGITAL</p>
+            <h1 className="font-bold text-base text-gray-900 tracking-tight leading-none">Quotation Studio</h1>
+            <p className="text-[11px] text-gray-500 font-medium">BUILDING INDIA DIGITAL</p>
           </div>
         </div>
 
@@ -292,7 +292,7 @@ export default function QuotationForm() {
             placeholder="Quotation Identifier Name..."
             value={formData.quotationName}
             onChange={(e) => setFormData({ ...formData, quotationName: e.target.value })}
-            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-1.5 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition"
           />
         </div>
 
@@ -302,46 +302,46 @@ export default function QuotationForm() {
           <button
             type="button"
             onClick={() => setIsSavedModalOpen(true)}
-            className="flex items-center gap-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg text-xs font-semibold border border-gray-700 transition"
+            className="flex items-center gap-1.5 bg-white hover:bg-gray-50 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-semibold border border-gray-300 shadow-xs transition"
           >
-            <FolderOpen className="w-3.5 h-3.5" /> Saved
+            <FolderOpen className="w-3.5 h-3.5 text-gray-500" /> Saved
           </button>
 
           {/* Settings */}
           <button
             type="button"
             onClick={() => setIsSettingsOpen(true)}
-            className="flex items-center gap-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg text-xs font-semibold border border-gray-700 transition"
+            className="flex items-center gap-1.5 bg-white hover:bg-gray-50 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-semibold border border-gray-300 shadow-xs transition"
           >
-            <Settings className="w-3.5 h-3.5" /> Settings
+            <Settings className="w-3.5 h-3.5 text-gray-500" /> Settings
           </button>
 
           {/* New Quotation */}
           <button
             type="button"
             onClick={handleNewQuotation}
-            className="flex items-center gap-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg text-xs font-semibold border border-gray-700 transition"
+            className="flex items-center gap-1.5 bg-white hover:bg-gray-50 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-semibold border border-gray-300 shadow-xs transition"
           >
-            <Plus className="w-3.5 h-3.5" /> New
+            <Plus className="w-3.5 h-3.5 text-gray-500" /> New
           </button>
 
           {/* View Toggles (Mobile/Desktop) */}
-          <div className="hidden lg:flex items-center bg-gray-800 p-0.5 rounded-lg border border-gray-700">
+          <div className="hidden lg:flex items-center bg-gray-100 p-0.5 rounded-lg border border-gray-200">
             <button
               onClick={() => setViewMode('split')}
-              className={`px-2.5 py-1 rounded text-xs font-semibold transition ${viewMode === 'split' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}
+              className={`px-2.5 py-1 rounded text-xs transition ${viewMode === 'split' ? 'bg-white text-blue-700 font-bold shadow-xs' : 'text-gray-600 hover:text-gray-900 font-medium'}`}
             >
               Split View
             </button>
             <button
               onClick={() => setViewMode('editor')}
-              className={`px-2.5 py-1 rounded text-xs font-semibold transition ${viewMode === 'editor' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}
+              className={`px-2.5 py-1 rounded text-xs transition ${viewMode === 'editor' ? 'bg-white text-blue-700 font-bold shadow-xs' : 'text-gray-600 hover:text-gray-900 font-medium'}`}
             >
               Editor Only
             </button>
             <button
               onClick={() => setViewMode('preview')}
-              className={`px-2.5 py-1 rounded text-xs font-semibold transition ${viewMode === 'preview' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}
+              className={`px-2.5 py-1 rounded text-xs transition ${viewMode === 'preview' ? 'bg-white text-blue-700 font-bold shadow-xs' : 'text-gray-600 hover:text-gray-900 font-medium'}`}
             >
               Preview Only
             </button>
@@ -352,7 +352,7 @@ export default function QuotationForm() {
             type="button"
             onClick={handleSaveQuotation}
             disabled={saving}
-            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold shadow transition disabled:opacity-50"
+            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold shadow-xs transition disabled:opacity-50"
           >
             <Save className="w-3.5 h-3.5" /> {saving ? 'Saving...' : 'Save'}
           </button>
