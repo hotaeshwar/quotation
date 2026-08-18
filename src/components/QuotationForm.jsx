@@ -610,7 +610,9 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
           <View style={{ flexDirection: 'row', alignItems: 'flex-end', marginBottom: 2 }}>
             <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', width: 90 }}>Business Name</Text>
             <View style={{ borderBottomWidth: 1, borderColor: '#000000', flex: 1, paddingBottom: 2 }}>
-              <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold' }}>{formData.clientName}</Text>
+              <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold' }} maxLines={1}>
+                {(formData.clientName || '').replace(/[\r\n]+/g, ' ').trim()}
+              </Text>
             </View>
           </View>
 
@@ -618,7 +620,9 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
           <View style={{ flexDirection: 'row', alignItems: 'flex-end', marginBottom: 2 }}>
             <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', width: 90 }}>Address</Text>
             <View style={{ borderBottomWidth: 1, borderColor: '#000000', flex: 1, paddingBottom: 2 }}>
-              <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold' }}>{formData.address}</Text>
+              <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold' }} maxLines={1}>
+                {(formData.address || '').replace(/[\r\n]+/g, ', ').trim()}
+              </Text>
             </View>
           </View>
 
@@ -627,13 +631,17 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
             <View style={{ flexDirection: 'row', alignItems: 'flex-end', width: '48%' }}>
               <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', width: 90 }}>Contact Person</Text>
               <View style={{ borderBottomWidth: 1, borderColor: '#000000', flex: 1, paddingBottom: 2 }}>
-                <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold' }}>{formData.contactPerson}</Text>
+                <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold' }} maxLines={1}>
+                  {(formData.contactPerson || '').replace(/[\r\n]+/g, ' ').trim()}
+                </Text>
               </View>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'flex-end', width: '48%' }}>
               <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', width: 90 }}>Phone/Mobile</Text>
               <View style={{ borderBottomWidth: 1, borderColor: '#000000', flex: 1, paddingBottom: 2 }}>
-                <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold' }}>{formData.phone}</Text>
+                <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold' }} maxLines={1}>
+                  {(formData.phone || '').replace(/[\r\n]+/g, ' ').trim()}
+                </Text>
               </View>
             </View>
           </View>
@@ -1536,9 +1544,8 @@ const QuotationForm = () => {
                   <FormField
                     label="Address"
                     value={formData.address}
-                    onChange={(value) => handleFormChange('address', value)}
-                    type="textarea"
-                    rows={4}
+                    onChange={(value) => handleFormChange('address', value.replace(/[\r\n]+/g, ' '))}
+                    type="text"
                   />
                 </div>
               </div>
