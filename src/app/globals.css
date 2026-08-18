@@ -1,0 +1,141 @@
+@import "tailwindcss";
+
+/* TipTap Editor & Prose Styling */
+.ProseMirror {
+  outline: none;
+  min-height: 100px;
+}
+
+.ProseMirror p {
+  margin-bottom: 0.5rem;
+}
+
+.ProseMirror ul {
+  list-style-type: disc;
+  padding-left: 1.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.ProseMirror ol {
+  list-style-type: decimal;
+  padding-left: 1.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.ProseMirror h1 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-top: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.ProseMirror h2 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-top: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.ProseMirror h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-top: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.ProseMirror mark {
+  background-color: #ffef96;
+  padding: 0.1rem 0.2rem;
+  border-radius: 0.125rem;
+}
+
+/* Printable PDF page break helper */
+.html2pdf__page-break {
+  page-break-before: always;
+  break-before: page;
+}
+
+/* Quotation PDF Preview Prose List Styles (Bullets & Numbers) */
+#quotation-pdf-preview ul,
+.pdf-prose-content ul {
+  list-style-type: disc !important;
+  list-style-position: outside !important;
+  padding-left: 1.25rem !important;
+  margin-top: 0.25rem !important;
+  margin-bottom: 0.25rem !important;
+}
+
+#quotation-pdf-preview ol,
+.pdf-prose-content ol {
+  list-style-type: decimal !important;
+  list-style-position: outside !important;
+  padding-left: 1.25rem !important;
+  margin-top: 0.25rem !important;
+  margin-bottom: 0.25rem !important;
+}
+
+#quotation-pdf-preview li,
+.pdf-prose-content li {
+  display: list-item !important;
+  margin-top: 0.1rem !important;
+  margin-bottom: 0.1rem !important;
+}
+
+#quotation-pdf-preview ul > li,
+.pdf-prose-content ul > li {
+  list-style-type: disc !important;
+}
+
+#quotation-pdf-preview ol > li,
+.pdf-prose-content ol > li {
+  list-style-type: decimal !important;
+}
+
+/* Explicit Text Alignment rules for Editor, Preview & PDF */
+.ProseMirror [style*="text-align: center"],
+.ProseMirror [style*="text-align:center"],
+#quotation-pdf-preview [style*="text-align: center"],
+#quotation-pdf-preview [style*="text-align:center"],
+.pdf-prose-content [style*="text-align: center"],
+.pdf-prose-content [style*="text-align:center"],
+.prose [style*="text-align: center"],
+.prose [style*="text-align:center"] {
+  text-align: center !important;
+}
+
+.ProseMirror [style*="text-align: right"],
+.ProseMirror [style*="text-align:right"],
+#quotation-pdf-preview [style*="text-align: right"],
+#quotation-pdf-preview [style*="text-align:right"],
+.pdf-prose-content [style*="text-align: right"],
+.pdf-prose-content [style*="text-align:right"],
+.prose [style*="text-align: right"],
+.prose [style*="text-align:right"] {
+  text-align: right !important;
+}
+
+.ProseMirror [style*="text-align: justify"],
+.ProseMirror [style*="text-align:justify"],
+#quotation-pdf-preview [style*="text-align: justify"],
+#quotation-pdf-preview [style*="text-align:justify"],
+.pdf-prose-content [style*="text-align: justify"],
+.pdf-prose-content [style*="text-align:justify"],
+.prose [style*="text-align: justify"],
+.prose [style*="text-align:justify"] {
+  text-align: justify !important;
+}
+
+.ProseMirror [style*="text-align: left"],
+.ProseMirror [style*="text-align:left"],
+#quotation-pdf-preview [style*="text-align: left"],
+#quotation-pdf-preview [style*="text-align:left"],
+.pdf-prose-content [style*="text-align: left"],
+.pdf-prose-content [style*="text-align:left"],
+.prose [style*="text-align: left"],
+.prose [style*="text-align:left"] {
+  text-align: left !important;
+}
+
+nextjs-portal, #__next-feedback {
+  display: none !important;
+}
