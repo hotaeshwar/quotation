@@ -15,7 +15,7 @@ if (typeof window !== 'undefined') {
 }
 
 const signatureImage = "/images/signature1.png";
-const companyLogo = "/images/LOGO c.png";
+const companyLogo = "/images/LOGO%20c.png";
 
 // Constants
 const CURRENCY_SYMBOLS = {
@@ -288,7 +288,7 @@ const numberToWords = (num) => {
   let parts = cleanNum.split('.');
   let wholePart = parseInt(parts[0], 10);
   if (isNaN(wholePart) || wholePart === 0) return 'Zero Only';
-  let result = inWords(wholePart).trim();
+  let result = (inWords(wholePart) || '').trim();
   if (result && !result.endsWith('Only')) {
     result += ' Only';
   }
@@ -306,10 +306,11 @@ const formatAmountWithCommas = (amount) => {
 };
 
 const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top' }) => {
-  if (!html) return <Text style={customStyle}>{""}</Text>;
+  const htmlString = typeof html === 'string' ? html : (html ? String(html) : '');
+  if (!htmlString.trim()) return <Text style={customStyle}>{""}</Text>;
   if (typeof window === 'undefined') return <Text style={customStyle}>{""}</Text>; // Safe guard for Next.js SSR
   const parser = new window.DOMParser();
-  const doc = parser.parseFromString(html, 'text/html');
+  const doc = parser.parseFromString(htmlString, 'text/html');
   const fs = customStyle?.fontSize || 10.5;
   const scaleRatio = fs / 11.0;
   const pMarginBottom = 2.0;
@@ -1085,7 +1086,7 @@ const QuotationForm = () => {
       URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Error generating PDF:', error);
-      alert('Error generating PDF. Please try again.');
+      alert('Error generating PDF: ' + (error?.message || 'Unknown error'));
     }
   };
 
