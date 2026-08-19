@@ -180,8 +180,8 @@ const styles = StyleSheet.create({
     width: '48%',
   },
   signatureImage: {
-    width: 105,
-    height: 45,
+    width: 120,
+    height: 55,
   },
   signatureLabel: {
     fontSize: 12,
@@ -189,15 +189,15 @@ const styles = StyleSheet.create({
     marginBottom: 1,
   },
   declarationText: {
-    fontSize: 8.5,
-    marginBottom: 3,
-    lineHeight: 1.15,
+    fontSize: 9.5,
+    marginBottom: 4,
+    lineHeight: 1.25,
     fontFamily: 'Helvetica-Bold',
   },
   declarationItem: {
-    fontSize: 8.0,
-    marginBottom: 1,
-    lineHeight: 1.15,
+    fontSize: 9.0,
+    marginBottom: 2,
+    lineHeight: 1.25,
     paddingLeft: 8,
     fontFamily: 'Helvetica-Bold',
   },
@@ -496,18 +496,18 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
   const wordAmountFontSize = isExtraCompact ? 8.5 : (isCompact ? 9.5 : 11);
   const amountSectionPadding = isExtraCompact ? 2 : (isCompact ? 3 : 4);
   const spacingMargin = isExtraCompact ? 2.5 : (isCompact ? 5 : 10);
-  const sectionHeaderFont = isExtraCompact ? 9.5 : (isCompact ? 10.5 : 12);
-  const sectionHeaderMarginBottom = isExtraCompact ? 1.5 : (isCompact ? 3 : 4);
-  const paymentLabelFont = isExtraCompact ? 7.5 : (isCompact ? 8.5 : 9);
-  const paymentValFont = isExtraCompact ? 7.5 : (isCompact ? 8.5 : 9);
-  const paymentMarginBottom = isExtraCompact ? 1 : (isCompact ? 2.5 : 4);
-  const declarationTextFont = isExtraCompact ? 7.0 : (isCompact ? 8.0 : 8.5);
-  const declarationItemFont = isExtraCompact ? 6.5 : (isCompact ? 7.5 : 8.0);
-  const declarationItemLineHeight = isExtraCompact ? 1.05 : (isCompact ? 1.1 : 1.15);
-  const signatureSectionMarginTop = isExtraCompact ? 8 : (isCompact ? 15 : 25);
-  const signatureImageWidth = isExtraCompact ? 105 : (isCompact ? 125 : 145);
-  const signatureImageHeight = isExtraCompact ? 45 : (isCompact ? 54 : 62);
-  const signatureLabelFont = isExtraCompact ? 9.5 : (isCompact ? 11 : 12);
+  const sectionHeaderFont = isExtraCompact ? 10.0 : (isCompact ? 11.5 : 13);
+  const sectionHeaderMarginBottom = isExtraCompact ? 2 : (isCompact ? 3.5 : 5);
+  const paymentLabelFont = isExtraCompact ? 8.5 : (isCompact ? 9.5 : 10.5);
+  const paymentValFont = isExtraCompact ? 8.5 : (isCompact ? 9.5 : 10.5);
+  const paymentMarginBottom = isExtraCompact ? 1.5 : (isCompact ? 3 : 5);
+  const declarationTextFont = isExtraCompact ? 8.0 : (isCompact ? 9.0 : 10.0);
+  const declarationItemFont = isExtraCompact ? 7.5 : (isCompact ? 8.5 : 9.5);
+  const declarationItemLineHeight = isExtraCompact ? 1.18 : (isCompact ? 1.25 : 1.32);
+  const signatureSectionMarginTop = isExtraCompact ? 10 : (isCompact ? 15 : 20);
+  const signatureImageWidth = isExtraCompact ? 95 : (isCompact ? 115 : 135);
+  const signatureImageHeight = isExtraCompact ? 42 : (isCompact ? 52 : 60);
+  const signatureLabelFont = isExtraCompact ? 9.5 : (isCompact ? 10.5 : 11.5);
 
   const cellStyle = {
     ...styles.tableCell,
@@ -731,7 +731,7 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
                 "I allow BUILDING INDIA DIGITAL to make commercial calls to my mobile number(s).",
                 "This declaration holds valid even if numbers registered for NDNC."
               ].map((item, index) => (
-                <Text key={index} style={[styles.declarationItem, { fontSize: declarationItemFont, lineHeight: declarationItemLineHeight, marginBottom: isExtraCompact ? 0.2 : 1 }]}>• {item}</Text>
+                <Text key={index} style={[styles.declarationItem, { fontSize: declarationItemFont, lineHeight: declarationItemLineHeight, marginBottom: isExtraCompact ? 0.8 : 2.0 }]}>• {item}</Text>
               ))}
             </View>
 
@@ -1178,7 +1178,7 @@ const QuotationForm = () => {
     setFormData(quotation.formData);
     setSubscriptionItems(quotation.subscriptionItems);
 
-    let updatedQuotationInfo = { ...quotation.quotationInfo };
+    let updatedQuotationInfo = { ...INITIAL_QUOTATION_INFO, ...(quotation?.quotationInfo || {}) };
     const num = updatedQuotationInfo.number || '';
     
     // Check if it's in the old format (does not contain YYYY/MM/DD)
@@ -1699,15 +1699,17 @@ const QuotationForm = () => {
                     </div>
                   </div>
                   <div className="text-left">
-                    <h3 className="font-bold text-base mb-0 pb-0 leading-tight">ORGANISATION SIGNATURE</h3>
+                    <h3 className="font-bold text-base mb-1 text-gray-800">ORGANISATION SIGNATURE</h3>
                     <img
                       src={signatureImage}
                       alt="Organization Signature"
                       style={{
-                        width: '200px',
-                        height: '140px',
+                        width: '155px',
+                        height: 'auto',
+                        maxHeight: '85px',
+                        objectFit: 'contain',
                         display: 'block',
-                        marginTop: '-18px'
+                        marginTop: '4px'
                       }}
                     />
                   </div>
@@ -1809,13 +1811,13 @@ const QuotationForm = () => {
                           <div key={quot.id} className="p-4 flex items-center justify-between hover:bg-gray-50">
                             <div>
                               <div className="font-medium flex items-center gap-2 text-gray-900">
-                                {quot.quotationInfo.number}
-                                {quot.formData.isRevised && (
+                                {quot.quotationInfo?.number || quot.number || 'No Quotation Number'}
+                                {quot.formData?.isRevised && (
                                   <span className="bg-orange-500 text-white text-xs px-1.5 py-0.5 rounded">R{quot.formData.revisionNumber}</span>
                                 )}
                               </div>
                               <div className="text-sm text-gray-600 mt-1 font-medium">
-                                {quot.formData.quotationName ? `${quot.formData.quotationName} (${quot.formData.clientName || 'No Client Name'})` : (quot.formData.clientName || 'No Client Name')}
+                                {quot.formData?.quotationName ? `${quot.formData.quotationName} (${quot.formData.clientName || 'No Client Name'})` : (quot.formData?.clientName || 'No Client Name')}
                               </div>
                               <div className="text-xs text-gray-400 mt-1">Saved on: {new Date(quot.savedAt || Date.now()).toLocaleString()}</div>
                             </div>
@@ -1828,15 +1830,16 @@ const QuotationForm = () => {
                                     try {
                                       const blob = await pdf(<QuotationPDF
                                         formData={quot.formData}
-                                        quotationInfo={quot.quotationInfo}
-                                        subscriptionItems={quot.subscriptionItems}
+                                        quotationInfo={quot.quotationInfo || INITIAL_QUOTATION_INFO}
+                                        subscriptionItems={quot.subscriptionItems || []}
                                       />).toBlob();
                                       const url = URL.createObjectURL(blob);
                                       const link = document.createElement('a');
                                       link.href = url;
+                                      const quotNum = quot.quotationInfo?.number || 'quotation';
                                       const filename = quot.formData.quotationName
                                         ? `${quot.formData.quotationName}.pdf`
-                                        : `quotation-${quot.quotationInfo.number.replace(/\//g, '-')}.pdf`;
+                                        : `quotation-${quotNum.replace(/\//g, '-')}.pdf`;
                                       link.download = filename;
                                       document.body.appendChild(link);
                                       link.click();
