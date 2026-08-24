@@ -52,7 +52,9 @@ const styles = StyleSheet.create({
   page: {
     flexDirection: 'column',
     backgroundColor: '#FFFFFF',
-    padding: 11,
+    paddingTop: 14,
+    paddingBottom: 14,
+    paddingHorizontal: 12,
     fontFamily: 'Helvetica',
   },
   header: {
@@ -82,18 +84,24 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
   table: {
-    borderWidth: 2,
-    borderColor: '#000000',
-    borderStyle: 'solid',
     width: '100%',
     marginBottom: 8,
   },
   tableHeaderRow: {
     flexDirection: 'row',
     backgroundColor: '#f0f0f0',
+    borderTopWidth: 2,
+    borderTopColor: '#000000',
+    borderTopStyle: 'solid',
     borderBottomWidth: 2,
     borderBottomColor: '#000000',
     borderBottomStyle: 'solid',
+    borderLeftWidth: 2,
+    borderLeftColor: '#000000',
+    borderLeftStyle: 'solid',
+    borderRightWidth: 2,
+    borderRightColor: '#000000',
+    borderRightStyle: 'solid',
     minHeight: 24,
     alignItems: 'center',
   },
@@ -120,6 +128,15 @@ const styles = StyleSheet.create({
   tableBodyRow: {
     flexDirection: 'row',
     alignItems: 'stretch',
+    borderLeftWidth: 2,
+    borderLeftColor: '#000000',
+    borderLeftStyle: 'solid',
+    borderRightWidth: 2,
+    borderRightColor: '#000000',
+    borderRightStyle: 'solid',
+    borderBottomWidth: 2,
+    borderBottomColor: '#000000',
+    borderBottomStyle: 'solid',
   },
   tableBodyColLeft: {
     width: '20%',
@@ -356,10 +373,10 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
     return '';
   };
 
-  const blockMargin = isExtraCompact ? 1.0 : (isCompact ? 1.5 : 3.0);
-  const listMargin = isExtraCompact ? 1.5 : (isCompact ? 2.5 : 4.0);
-  const listItemMargin = isExtraCompact ? 0.5 : (isCompact ? 1.0 : 2.0);
-  const fallbackMargin = isExtraCompact ? 0.5 : (isCompact ? 1.0 : 2.0);
+  const blockMargin = isExtraCompact ? 1.0 : (isCompact ? 1.2 : 1.5);
+  const listMargin = isExtraCompact ? 1.0 : (isCompact ? 1.2 : 1.5);
+  const listItemMargin = isExtraCompact ? 0.4 : (isCompact ? 0.6 : 0.8);
+  const fallbackMargin = isExtraCompact ? 0.4 : (isCompact ? 0.6 : 0.8);
 
   // Process block node (returns <View> containing <Text>)
   const renderBlockNode = (node, keyIndex) => {
@@ -459,7 +476,7 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
   }
 
   return (
-    <View style={{ padding: 2, width: '100%' }}>
+    <View style={{ width: '100%' }}>
       {blockNodes}
     </View>
   );
@@ -478,8 +495,8 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
   }, 0);
 
   // Dynamic layout compaction settings
-  const isCompact = totalTextLength > 600 || subscriptionItems.length > 1;
-  const isExtraCompact = totalTextLength > 1200 || subscriptionItems.length > 3;
+  const isCompact = totalTextLength > 400 || subscriptionItems.length > 1;
+  const isExtraCompact = totalTextLength > 650 || subscriptionItems.length >= 3;
 
   const logoWidth = isExtraCompact ? 180 : (isCompact ? 210 : 250);
   const logoHeight = isExtraCompact ? 50 : (isCompact ? 60 : 72);
@@ -487,10 +504,11 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
   const headerRowMargin = isExtraCompact ? 1 : (isCompact ? 2 : 4);
   const clientInfoMarginBottom = isExtraCompact ? 1 : (isCompact ? 2 : 4);
   const clientInfoRowMarginBottom = isExtraCompact ? 1 : (isCompact ? 1.5 : 2);
-  const tableMarginBottom = isExtraCompact ? 2 : (isCompact ? 4 : 8);
+  const tableHeaderMarginTop = isExtraCompact ? 4 : (isCompact ? 6 : 8);
+  const tableMarginBottom = isExtraCompact ? 2 : (isCompact ? 4 : 6);
   const tableHeaderMinHeight = isExtraCompact ? 16 : (isCompact ? 20 : 24);
-  const tableCellPadding = isExtraCompact ? 2.5 : (isCompact ? 3.5 : 4);
-  const tableFontSize = isExtraCompact ? 8.0 : (isCompact ? 9.0 : 10.0);
+  const tableCellPadding = isExtraCompact ? 2.5 : (isCompact ? 3.0 : 3.5);
+  const tableFontSize = isExtraCompact ? 8.5 : (isCompact ? 9.0 : 9.5);
   const amountFontSize = isExtraCompact ? 10.5 : (isCompact ? 12 : 14);
   const noteFontSize = isExtraCompact ? 9.5 : (isCompact ? 11 : 13);
   const wordAmountFontSize = isExtraCompact ? 8.5 : (isCompact ? 9.5 : 11);
@@ -512,7 +530,7 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
   const cellStyle = {
     ...styles.tableCell,
     fontSize: tableFontSize,
-    lineHeight: 1.15,
+    lineHeight: 1.22,
     padding: tableCellPadding
   };
 
@@ -615,25 +633,25 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
           </View>
         </View>
 
-        {/* Subscription Tables (Independent blocks that carry their headers on page break) */}
-        {subscriptionItems.map((item, index) => (
-          <View
-            key={`table-block-${index}`}
-            style={[styles.table, { marginBottom: tableMarginBottom }]}
-            wrap={false}
-          >
-            {/* Table Header */}
-            <View style={[styles.tableHeaderRow, { minHeight: tableHeaderMinHeight }]}>
-              <View style={styles.tableHeaderColLeft}>
-                <Text style={[styles.tableHeaderCellText, { fontSize: tableFontSize }]}>SUBSCRIPTION</Text>
-              </View>
-              <View style={styles.tableHeaderColRight}>
-                <Text style={[styles.tableHeaderCellText, { fontSize: tableFontSize }]}>DESCRIPTION</Text>
-              </View>
+        {/* Unified Subscription Table (Word Layout Rules) */}
+        <View style={[styles.table, { marginTop: tableHeaderMarginTop, marginBottom: tableMarginBottom }]}>
+          {/* Table Header (repeats on page breaks) */}
+          <View style={[styles.tableHeaderRow, { minHeight: tableHeaderMinHeight }]} fixed>
+            <View style={styles.tableHeaderColLeft}>
+              <Text style={[styles.tableHeaderCellText, { fontSize: tableFontSize }]}>SUBSCRIPTION</Text>
             </View>
+            <View style={styles.tableHeaderColRight}>
+              <Text style={[styles.tableHeaderCellText, { fontSize: tableFontSize }]}>DESCRIPTION</Text>
+            </View>
+          </View>
 
-            {/* Table Content Row */}
-            <View style={styles.tableBodyRow}>
+          {/* Table Content Rows */}
+          {subscriptionItems.map((item, index) => (
+            <View
+              key={`table-row-${index}`}
+              style={styles.tableBodyRow}
+              wrap={false}
+            >
               <View style={[styles.tableBodyColLeft, { justifyContent: vAlignStyle, padding: tableCellPadding }]}>
                 <HtmlToPdf
                   html={item.serialNumber}
@@ -653,8 +671,8 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
                 />
               </View>
             </View>
-          </View>
-        ))}
+          ))}
+        </View>
 
         <View style={{ marginTop: isExtraCompact ? 2 : 6 }}>
           {/* Group 1: Amount Section & Cheques Note */}
@@ -1568,7 +1586,7 @@ const QuotationForm = () => {
               </div>
 
               {/* Subscription Table */}
-              <div className="mb-6">
+              <div className="mb-6 custom-header-table-spacing">
                 <div className="flex justify-between items-center mb-3">
                   <h3 className="text-base font-bold">SUBSCRIPTION & DESCRIPTION DETAILS</h3>
                   <button
@@ -1578,12 +1596,12 @@ const QuotationForm = () => {
                     <Plus size={12} /> Add
                   </button>
                 </div>
-                <table className="w-full text-sm" style={{ border: '2px solid black', tableLayout: 'fixed' }}>
-                  <thead>
+                <table className="w-full text-sm custom-word-table" style={{ borderCollapse: 'collapse', tableLayout: 'fixed', width: '100%', border: '2px solid black' }}>
+                  <thead className="custom-word-table-header">
                     <tr className="bg-gray-100">
-                      <th className="p-2 text-left w-1/5" style={{ border: '2px solid black' }}>SUBSCRIPTION</th>
-                      <th className="p-2 text-left w-3/4" style={{ border: '2px solid black' }}>DESCRIPTION</th>
-                      <th className="print:hidden p-2 text-left w-1/12" style={{ border: '2px solid black' }}>Actions</th>
+                      <th className="p-2 text-center custom-word-col-subscription" style={{ border: '2px solid black', width: '20%' }}>SUBSCRIPTION</th>
+                      <th className="p-2 text-center custom-word-col-description" style={{ border: '2px solid black', width: '70%' }}>DESCRIPTION</th>
+                      <th className="print:hidden p-2 text-center" style={{ border: '2px solid black', width: '10%' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>

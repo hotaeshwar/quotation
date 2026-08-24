@@ -3,3 +3,76 @@
 nextjs-portal, #__next-feedback {
   display: none !important;
 }
+
+/* Microsoft Word Ruler Formula & Custom Table CSS */
+.custom-word-table {
+  width: 100% !important;
+  border-collapse: collapse !important;
+  table-layout: fixed !important;
+  margin-bottom: 1rem;
+}
+
+.custom-word-table th,
+.custom-word-table td {
+  border: 2px solid #000000 !important;
+  box-sizing: border-box !important;
+  word-wrap: break-word !important;
+  overflow-wrap: break-word !important;
+}
+
+.custom-word-table th {
+  background-color: #f0f0f0 !important;
+  font-weight: bold !important;
+  text-align: center !important;
+  padding: 8px 8px !important;
+  font-size: 11pt !important;
+  letter-spacing: 0.5px !important;
+}
+
+.custom-word-table td {
+  padding: 6px 8px !important;
+  font-size: 10.5pt !important;
+  line-height: 1.35 !important;
+}
+
+.custom-word-table td p,
+.custom-word-table td ul,
+.custom-word-table td ol {
+  margin-top: 2px !important;
+  margin-bottom: 4px !important;
+  padding-bottom: 0 !important;
+}
+
+.custom-word-table td li {
+  margin-bottom: 2.5px !important;
+  padding-bottom: 0 !important;
+}
+
+
+/* Word Ruler column width formula: 20% Subscription (Col 1), 80% Description (Col 2) */
+.custom-word-col-subscription {
+  width: 20% !important;
+}
+
+.custom-word-col-description {
+  width: 80% !important;
+}
+
+/* Custom margin top between header section and table */
+.custom-header-table-spacing {
+  margin-top: 10px !important;
+}
+
+/* Custom top margin for 2nd onwards pages in print mode */
+@media print {
+  .custom-word-table {
+    margin-top: 10px !important;
+  }
+  
+  thead.custom-word-table-header {
+    display: table-header-group;
+    margin-top: 10px !important;
+  }
+}
+
+
