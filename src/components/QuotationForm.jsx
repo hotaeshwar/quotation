@@ -6,9 +6,10 @@ import { Editor } from '@tinymce/tinymce-react';
 import { Document, Page, Text, View, StyleSheet, pdf, Image, Font, Svg, Path } from '@react-pdf/renderer';
 import { Buffer } from 'buffer';
 
-Font.registerHyphenationCallback(word => [word]);
 import { doc, setDoc, getDoc, deleteDoc, collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
+
+Font.registerHyphenationCallback(word => [word]);
 
 if (typeof window !== 'undefined') {
   window.Buffer = Buffer;
@@ -110,13 +111,13 @@ const styles = StyleSheet.create({
     borderRightWidth: 2,
     borderRightColor: '#000000',
     borderRightStyle: 'solid',
-    paddingVertical: 4,
+    paddingVertical: 2.5,
     justifyContent: 'center',
     alignItems: 'center',
   },
   tableHeaderColRight: {
     width: '80%',
-    paddingVertical: 4,
+    paddingVertical: 2.5,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -126,8 +127,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   tableBodyRow: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
+    borderTopWidth: 2,
+    borderTopColor: '#000000',
+    borderTopStyle: 'solid',
     borderLeftWidth: 2,
     borderLeftColor: '#000000',
     borderLeftStyle: 'solid',
@@ -155,12 +157,12 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
   },
   tableCell: {
-    marginTop: 2,
-    marginBottom: 2,
+    marginTop: 0,
+    marginBottom: 0,
     fontSize: 11,
-    padding: 4,
+    padding: 0,
     textAlign: 'left',
-    lineHeight: 1.3,
+    lineHeight: 1.25,
     fontFamily: 'Helvetica',
   },
   tableCellBold: {
@@ -334,11 +336,14 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
   const processInlineNode = (node, keyPrefix, inheritedStyle = {}) => {
     if (node.nodeType === 3) {
       const text = node.textContent.replace(/&nbsp;/g, ' ').replace(/\u00A0/g, ' ');
-      if (!text) return '';
+      // If node contains only newlines and whitespace (formatting whitespace between HTML tags), ignore it
+      if (!text.replace(/[\r\n\t ]+/g, '')) return '';
+      // Replace newline characters inside inline text with a space so text doesn't drop to next line
+      const cleanText = text.replace(/[\r\n\t]+/g, ' ');
       if (Object.keys(inheritedStyle).length > 0) {
-        return <Text key={keyPrefix} style={inheritedStyle}>{text}</Text>;
+        return <Text key={keyPrefix} style={inheritedStyle}>{cleanText}</Text>;
       }
-      return text;
+      return cleanText;
     }
     if (node.nodeType === 1) {
       const tag = node.tagName.toLowerCase();
@@ -373,19 +378,19 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
     return '';
   };
 
-  const blockMargin = isExtraCompact ? 1.0 : (isCompact ? 1.2 : 1.5);
-  const listMargin = isExtraCompact ? 1.0 : (isCompact ? 1.2 : 1.5);
-  const listItemMargin = isExtraCompact ? 0.4 : (isCompact ? 0.6 : 0.8);
-  const fallbackMargin = isExtraCompact ? 0.4 : (isCompact ? 0.6 : 0.8);
+  const blockMargin = 2.5;
+  const listMargin = 2.0;
+  const listItemMargin = 1.5;
+  const fallbackMargin = 1.5;
 
   // Process block node (returns <View> containing <Text>)
   const renderBlockNode = (node, keyIndex) => {
     if (node.nodeType === 3) {
-      const text = node.textContent.trim();
+      const text = node.textContent.replace(/&nbsp;/g, ' ').replace(/\u00A0/g, ' ').trim();
       if (!text) return null;
       return (
         <View key={`blk-${keyIndex}`} style={{ marginBottom: fallbackMargin, width: '100%' }}>
-          <Text style={{ ...customStyle, textAlign: customStyle?.textAlign || 'left' }}>{text}</Text>
+          <Text style={{ ...customStyle, textAlign: customStyle?.textAlign || 'left', marginTop: 0, marginBottom: 0, padding: 0 }}>{text}</Text>
         </View>
       );
     }
@@ -393,9 +398,9 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
     if (node.nodeType === 1) {
       const tag = node.tagName.toLowerCase();
       if (tag === 'br') {
-        return <View key={`blk-${keyIndex}`} style={{ height: isExtraCompact ? 3 : 6 }} />;
+        return null;
       }
-      let blockStyle = { ...customStyle };
+      let blockStyle = { ...customStyle, marginTop: 0, marginBottom: 0, padding: 0 };
       let textAlign = customStyle?.textAlign || 'left';
 
       const styleAttr = node.getAttribute && node.getAttribute('style');
@@ -416,34 +421,52 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
       }
 
       if (['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'div'].includes(tag)) {
+        const rawText = (node.textContent || '').replace(/[\s\u00A0&nbsp;]+/g, '');
+        if (rawText.length === 0) {
+          return null; // Ignore completely blank paragraphs
+        }
+
         const inlineContent = Array.from(node.childNodes)
           .map((child, idx) => processInlineNode(child, `inl-${keyIndex}-${idx}`, {}))
+          .flat(Infinity)
           .filter(Boolean);
 
         if (inlineContent.length === 0) {
-          return <View key={`blk-${keyIndex}`} style={{ height: isExtraCompact ? 2 : 4 }} />;
+          return null;
         }
         return (
           <View key={`blk-${keyIndex}`} style={{ marginBottom: blockMargin, width: '100%' }}>
-            <Text style={{ ...blockStyle, width: '100%', textAlign }}>{inlineContent}</Text>
+            <Text style={{ ...blockStyle, width: '100%', textAlign, marginTop: 0, marginBottom: 0, padding: 0 }}>{inlineContent}</Text>
           </View>
         );
       }
 
       if (tag === 'ul' || tag === 'ol') {
         const listItems = Array.from(node.childNodes).filter(child => child.nodeType === 1 && child.tagName.toLowerCase() === 'li');
-        if (listItems.length === 0) return null;
+        // Filter out empty list items to prevent phantom bullet points and giant blank spaces
+        const validListItems = listItems.filter(li => (li.textContent || '').replace(/[\s\u00A0&nbsp;]+/g, '').length > 0);
+        if (validListItems.length === 0) return null;
+
         return (
-          <View key={`blk-${keyIndex}`} style={{ marginBottom: listMargin, paddingLeft: isExtraCompact ? 6 : 10, width: '100%' }}>
-            {listItems.map((liNode, liIdx) => {
+          <View key={`blk-${keyIndex}`} style={{ marginBottom: listMargin, paddingLeft: isExtraCompact ? 2 : 6, width: '100%' }}>
+            {validListItems.map((liNode, liIdx) => {
               const inlineContent = Array.from(liNode.childNodes)
                 .map((child, idx) => processInlineNode(child, `li-${keyIndex}-${liIdx}-${idx}`, {}))
+                .flat(Infinity)
                 .filter(Boolean);
+
+              // Trim leading whitespace on first string node so text starts flush with bullet
+              if (inlineContent.length > 0 && typeof inlineContent[0] === 'string') {
+                inlineContent[0] = inlineContent[0].replace(/^[\s\r\n]+/, '');
+              }
+
               return (
                 <View key={`li-row-${keyIndex}-${liIdx}`} style={{ flexDirection: 'row', marginBottom: listItemMargin, width: '100%', alignItems: 'flex-start' }}>
-                  <Text style={{ ...blockStyle, width: 'auto', marginRight: isExtraCompact ? 4 : 6 }}>{tag === 'ol' ? `${liIdx + 1}.` : '•'}</Text>
+                  <Text style={{ ...blockStyle, width: 9, marginRight: 3, marginTop: 0, marginBottom: 0, padding: 0 }}>
+                    {tag === 'ol' ? `${liIdx + 1}.` : '•'}
+                  </Text>
                   <View style={{ flex: 1 }}>
-                    <Text style={{ ...blockStyle, textAlign }}>{inlineContent}</Text>
+                    <Text style={{ ...blockStyle, textAlign, marginTop: 0, marginBottom: 0, padding: 0 }}>{inlineContent}</Text>
                   </View>
                 </View>
               );
@@ -452,6 +475,9 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
         );
       }
 
+      const rawFallbackText = (node.textContent || '').replace(/[\s\u00A0&nbsp;]+/g, '');
+      if (rawFallbackText.length === 0) return null;
+
       const inlineContent = Array.from(node.childNodes)
         .map((child, idx) => processInlineNode(child, `fallback-${keyIndex}-${idx}`, {}))
         .filter(Boolean);
@@ -459,7 +485,7 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
       if (inlineContent.length === 0) return null;
       return (
         <View key={`blk-${keyIndex}`} style={{ marginBottom: fallbackMargin, width: '100%' }}>
-          <Text style={{ ...blockStyle, width: '100%', textAlign }}>{inlineContent}</Text>
+          <Text style={{ ...blockStyle, width: '100%', textAlign, marginTop: 0, marginBottom: 0, padding: 0 }}>{inlineContent}</Text>
         </View>
       );
     }
@@ -494,44 +520,47 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
     return acc + getVisibleTextLength(item.serialNumber) + getVisibleTextLength(item.subscription);
   }, 0);
 
-  // Dynamic layout compaction settings
-  const isCompact = totalTextLength > 400 || subscriptionItems.length > 1;
-  const isExtraCompact = totalTextLength > 650 || subscriptionItems.length >= 3;
+  // Dynamic layout settings - comfortable, readable, natural pagination across 2 pages
+  const isCompact = totalTextLength > 600 || subscriptionItems.length > 2;
+  const isExtraCompact = false;
+  const isUltraCompact = false;
 
-  const logoWidth = isExtraCompact ? 180 : (isCompact ? 210 : 250);
-  const logoHeight = isExtraCompact ? 50 : (isCompact ? 60 : 72);
-  const headerBottomMargin = isExtraCompact ? 3 : (isCompact ? 5 : 8);
-  const headerRowMargin = isExtraCompact ? 1 : (isCompact ? 2 : 4);
-  const clientInfoMarginBottom = isExtraCompact ? 1 : (isCompact ? 2 : 4);
-  const clientInfoRowMarginBottom = isExtraCompact ? 1 : (isCompact ? 1.5 : 2);
-  const tableHeaderMarginTop = isExtraCompact ? 4 : (isCompact ? 6 : 8);
-  const tableMarginBottom = isExtraCompact ? 2 : (isCompact ? 4 : 6);
-  const tableHeaderMinHeight = isExtraCompact ? 16 : (isCompact ? 20 : 24);
-  const tableCellPadding = isExtraCompact ? 2.5 : (isCompact ? 3.0 : 3.5);
-  const tableFontSize = isExtraCompact ? 8.5 : (isCompact ? 9.0 : 9.5);
-  const amountFontSize = isExtraCompact ? 10.5 : (isCompact ? 12 : 14);
-  const noteFontSize = isExtraCompact ? 9.5 : (isCompact ? 11 : 13);
-  const wordAmountFontSize = isExtraCompact ? 8.5 : (isCompact ? 9.5 : 11);
-  const amountSectionPadding = isExtraCompact ? 2 : (isCompact ? 3 : 4);
-  const spacingMargin = isExtraCompact ? 2.5 : (isCompact ? 5 : 10);
-  const sectionHeaderFont = isExtraCompact ? 10.0 : (isCompact ? 11.5 : 13);
-  const sectionHeaderMarginBottom = isExtraCompact ? 2 : (isCompact ? 3.5 : 5);
-  const paymentLabelFont = isExtraCompact ? 8.5 : (isCompact ? 9.5 : 10.5);
-  const paymentValFont = isExtraCompact ? 8.5 : (isCompact ? 9.5 : 10.5);
-  const paymentMarginBottom = isExtraCompact ? 1.5 : (isCompact ? 3 : 5);
-  const declarationTextFont = isExtraCompact ? 8.0 : (isCompact ? 9.0 : 10.0);
-  const declarationItemFont = isExtraCompact ? 7.5 : (isCompact ? 8.5 : 9.5);
-  const declarationItemLineHeight = isExtraCompact ? 1.18 : (isCompact ? 1.25 : 1.32);
-  const signatureSectionMarginTop = isExtraCompact ? 10 : (isCompact ? 15 : 20);
-  const signatureImageWidth = isExtraCompact ? 95 : (isCompact ? 115 : 135);
-  const signatureImageHeight = isExtraCompact ? 42 : (isCompact ? 52 : 60);
-  const signatureLabelFont = isExtraCompact ? 9.5 : (isCompact ? 10.5 : 11.5);
+  const logoWidth = isCompact ? 210 : 240;
+  const logoHeight = isCompact ? 58 : 68;
+  const headerBottomMargin = isCompact ? 5 : 8;
+  const headerRowMargin = isCompact ? 2 : 4;
+  const clientInfoMarginBottom = isCompact ? 3 : 5;
+  const clientInfoRowMarginBottom = isCompact ? 1.5 : 2.5;
+  const tableHeaderMarginTop = isCompact ? 6 : 8;
+  const tableMarginBottom = isCompact ? 6 : 8;
+  const tableHeaderMinHeight = 24;
+  const tableCellPadding = isCompact ? 3.5 : 4.5;
+  const tableFontSize = isCompact ? 9.0 : 9.5;
+  const amountFontSize = isCompact ? 12 : 13.5;
+  const noteFontSize = isCompact ? 10.5 : 12;
+  const wordAmountFontSize = isCompact ? 9.5 : 10.5;
+  const amountSectionPadding = isCompact ? 3 : 4;
+  const spacingMargin = isCompact ? 5 : 8;
+  const sectionHeaderFont = isCompact ? 11 : 12.5;
+  const sectionHeaderMarginBottom = isCompact ? 3 : 4;
+  const paymentLabelFont = isCompact ? 9.0 : 10.0;
+  const paymentValFont = isCompact ? 9.0 : 10.0;
+  const paymentMarginBottom = isCompact ? 2.5 : 3.5;
+  const declarationTextFont = isCompact ? 8.5 : 9.5;
+  const declarationItemFont = isCompact ? 8.0 : 9.0;
+  const declarationItemLineHeight = 1.25;
+  const signatureSectionMarginTop = isCompact ? 12 : 16;
+  const signatureImageWidth = isCompact ? 110 : 125;
+  const signatureImageHeight = isCompact ? 48 : 56;
+  const signatureLabelFont = isCompact ? 10.0 : 11.0;
 
   const cellStyle = {
     ...styles.tableCell,
     fontSize: tableFontSize,
-    lineHeight: 1.22,
-    padding: tableCellPadding
+    lineHeight: 1.28,
+    marginTop: 0,
+    marginBottom: 0,
+    padding: 0
   };
 
   const vAlignMap = {
@@ -594,8 +623,8 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
         <View style={{ marginBottom: clientInfoMarginBottom }}>
           {/* Business Name Row */}
           <View style={{ flexDirection: 'row', alignItems: 'flex-end', marginBottom: clientInfoRowMarginBottom }}>
-            <Text style={{ fontSize: isExtraCompact ? 9 : 10, fontFamily: 'Helvetica-Bold', width: 90 }}>Business Name</Text>
-            <View style={{ borderBottomWidth: 1, borderColor: '#000000', flex: 1, paddingBottom: clientInfoRowMarginBottom }}>
+            <Text style={{ fontSize: isExtraCompact ? 9 : 10, fontFamily: 'Helvetica-Bold', width: 95 }}>Business Name</Text>
+            <View style={{ borderBottomWidth: 1, borderColor: '#000000', flex: 1, paddingBottom: clientInfoRowMarginBottom, paddingLeft: 4 }}>
               <Text style={{ fontSize: isExtraCompact ? 9 : 10, fontFamily: 'Helvetica-Bold' }} maxLines={1}>
                 {(formData.clientName || '').replace(/[\r\n]+/g, ' ').trim()}
               </Text>
@@ -604,8 +633,8 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
 
           {/* Address Row */}
           <View style={{ flexDirection: 'row', alignItems: 'flex-end', marginBottom: clientInfoRowMarginBottom }}>
-            <Text style={{ fontSize: isExtraCompact ? 9 : 10, fontFamily: 'Helvetica-Bold', width: 90 }}>Address</Text>
-            <View style={{ borderBottomWidth: 1, borderColor: '#000000', flex: 1, paddingBottom: clientInfoRowMarginBottom }}>
+            <Text style={{ fontSize: isExtraCompact ? 9 : 10, fontFamily: 'Helvetica-Bold', width: 95 }}>Address</Text>
+            <View style={{ borderBottomWidth: 1, borderColor: '#000000', flex: 1, paddingBottom: clientInfoRowMarginBottom, paddingLeft: 4 }}>
               <Text style={{ fontSize: isExtraCompact ? 9 : 10, fontFamily: 'Helvetica-Bold' }} maxLines={1}>
                 {(formData.address || '').replace(/[\r\n]+/g, ', ').trim()}
               </Text>
@@ -615,16 +644,16 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
           {/* Contact & Phone Row */}
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
             <View style={{ flexDirection: 'row', alignItems: 'flex-end', width: '48%' }}>
-              <Text style={{ fontSize: isExtraCompact ? 9 : 10, fontFamily: 'Helvetica-Bold', width: 90 }}>Contact Person</Text>
-              <View style={{ borderBottomWidth: 1, borderColor: '#000000', flex: 1, paddingBottom: clientInfoRowMarginBottom }}>
+              <Text style={{ fontSize: isExtraCompact ? 9 : 10, fontFamily: 'Helvetica-Bold', width: 95 }}>Contact Person</Text>
+              <View style={{ borderBottomWidth: 1, borderColor: '#000000', flex: 1, paddingBottom: clientInfoRowMarginBottom, paddingLeft: 4 }}>
                 <Text style={{ fontSize: isExtraCompact ? 9 : 10, fontFamily: 'Helvetica-Bold' }} maxLines={1}>
                   {(formData.contactPerson || '').replace(/[\r\n]+/g, ' ').trim()}
                 </Text>
               </View>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'flex-end', width: '48%' }}>
-              <Text style={{ fontSize: isExtraCompact ? 9 : 10, fontFamily: 'Helvetica-Bold', width: 90 }}>Phone/Mobile</Text>
-              <View style={{ borderBottomWidth: 1, borderColor: '#000000', flex: 1, paddingBottom: clientInfoRowMarginBottom }}>
+              <Text style={{ fontSize: isExtraCompact ? 9 : 10, fontFamily: 'Helvetica-Bold', width: 85 }}>Phone/Mobile</Text>
+              <View style={{ borderBottomWidth: 1, borderColor: '#000000', flex: 1, paddingBottom: clientInfoRowMarginBottom, paddingLeft: 4 }}>
                 <Text style={{ fontSize: isExtraCompact ? 9 : 10, fontFamily: 'Helvetica-Bold' }} maxLines={1}>
                   {(formData.phone || '').replace(/[\r\n]+/g, ' ').trim()}
                 </Text>
@@ -635,8 +664,8 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
 
         {/* Unified Subscription Table (Word Layout Rules) */}
         <View style={[styles.table, { marginTop: tableHeaderMarginTop, marginBottom: tableMarginBottom }]}>
-          {/* Table Header (repeats on page breaks) */}
-          <View style={[styles.tableHeaderRow, { minHeight: tableHeaderMinHeight }]} fixed>
+          {/* Table Header */}
+          <View style={[styles.tableHeaderRow, { minHeight: tableHeaderMinHeight }]} minPresenceAhead={50}>
             <View style={styles.tableHeaderColLeft}>
               <Text style={[styles.tableHeaderCellText, { fontSize: tableFontSize }]}>SUBSCRIPTION</Text>
             </View>
@@ -649,10 +678,31 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
           {subscriptionItems.map((item, index) => (
             <View
               key={`table-row-${index}`}
-              style={styles.tableBodyRow}
+              style={[
+                styles.tableBodyRow,
+                {
+                  flexDirection: 'row',
+                  alignItems: 'stretch',
+                  marginTop: -2,
+                }
+              ]}
               wrap={false}
             >
-              <View style={[styles.tableBodyColLeft, { justifyContent: vAlignStyle, padding: tableCellPadding }]}>
+              {/* Left column label — fixed 20% width */}
+              <View
+                style={[
+                  styles.tableBodyColLeft,
+                  {
+                    width: '20%',
+                    justifyContent: vAlignStyle,
+                    padding: tableCellPadding,
+                    alignItems: 'center',
+                    borderRightWidth: 2,
+                    borderRightColor: '#000000',
+                    borderRightStyle: 'solid',
+                  },
+                ]}
+              >
                 <HtmlToPdf
                   html={item.serialNumber}
                   customStyle={{ ...cellStyle, fontFamily: 'Helvetica-Bold', textAlign: 'center' }}
@@ -661,7 +711,17 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
                   isExtraCompact={isExtraCompact}
                 />
               </View>
-              <View style={[styles.tableBodyColRight, { justifyContent: vAlignStyle, padding: tableCellPadding }]}>
+              {/* Right column content — 80% width */}
+              <View
+                style={[
+                  styles.tableBodyColRight,
+                  {
+                    width: '80%',
+                    justifyContent: vAlignStyle,
+                    padding: tableCellPadding,
+                  },
+                ]}
+              >
                 <HtmlToPdf
                   html={item.subscription}
                   customStyle={{ ...cellStyle, fontFamily: 'Helvetica' }}
@@ -704,7 +764,7 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
               </Text>
             </View>
             <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: wordAmountFontSize, textAlign: 'center', marginTop: isExtraCompact ? 2 : 5, color: '#FF0000', marginBottom: isExtraCompact ? 2 : 5 }}>
-              * Cheques should be drawn in favour of Devine sTudio
+              * Cheques should be drawn in favour of BiD
             </Text>
           </View>
 
@@ -1659,7 +1719,7 @@ const QuotationForm = () => {
                   <div className="text-center text-sm font-semibold mt-1">(GST EXTRA)</div>
                 </div>
                 <div className="text-center text-sm font-bold text-red-600 mb-6">
-                  * Cheques should be drawn in favour of Devine sTudio
+                  * Cheques should be drawn in favour of BiD
                 </div>
 
                 {/* Payment Details */}
