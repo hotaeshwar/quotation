@@ -269,19 +269,6 @@ const styles = StyleSheet.create({
 });
 
 // Helper function to strip HTML and preserve line breaks
-const cleanCurrencyText = (str) => {
-  if (!str) return '';
-  return String(str)
-    .replace(/&nbsp;/g, ' ')
-    .replace(/\u00A0/g, ' ')
-    .replace(/([a-zA-Z&])([¹₹\u20B9])/g, '$1 $2')
-    .replace(/[₹\u20B9]/g, 'Rs. ')
-    .replace(/&(?:#8377;|#x20b9;)/gi, 'Rs. ')
-    .replace(/¹\s*(?=\d)/g, 'Rs. ')
-    .replace(/¹/g, 'Rs. ')
-    .replace(/Rs\.\s+/g, 'Rs. ');
-};
-
 const stripHtmlAndPreserveBreaks = (html) => {
   if (!html) return '';
   let text = html.replace(/<br\s*\/?>/gi, '\n')
@@ -295,8 +282,8 @@ const stripHtmlAndPreserveBreaks = (html) => {
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
-    .replace(/&rsquo;/g, "'");
-  return cleanCurrencyText(text).trim();
+    .replace(/&rsquo;/g, "'")
+  return text.trim();
 };
 
 const numberToWords = (num) => {
@@ -337,20 +324,29 @@ const formatAmountWithCommas = (amount) => {
     : num.toLocaleString('en-IN', { maximumFractionDigits: 0 });
 };
 
-const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = false }) => {
+const formatCurrencyInText = (text) => {
+  if (!text || typeof text !== 'string') return text || '';
+  let res = text
+    .replace(/(?:₹|&#8377;|\u20B9)\s*/g, 'Rs. ')
+    .replace(/(?:¹|\u00B9)\s*(?=\d)/g, 'Rs. ')
+    .replace(/(?:¹|\u00B9)/g, 'Rs. ');
+  res = res.replace(/Rs\.\s*Rs\.\s*/gi, 'Rs. ');
+  return res;
+};
+
+const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = false, isExtraCompact = false }) => {
   const htmlString = typeof html === 'string' ? html : (html ? String(html) : '');
   if (!htmlString.trim()) return <Text style={customStyle}>{""}</Text>;
   if (typeof window === 'undefined') return <Text style={customStyle}>{""}</Text>;
 
-  const sanitizedHtml = cleanCurrencyText(htmlString);
   const parser = new window.DOMParser();
-  const doc = parser.parseFromString(sanitizedHtml, 'text/html');
+  const doc = parser.parseFromString(htmlString, 'text/html');
 
   // Process inline nodes (returns text string or <Text> node with inline formatting)
   const processInlineNode = (node, keyPrefix, inheritedStyle = {}) => {
     if (node.nodeType === 3) {
       let text = node.textContent.replace(/&nbsp;/g, ' ').replace(/\u00A0/g, ' ');
-      text = cleanCurrencyText(text);
+      text = formatCurrencyInText(text);
       // If node contains only newlines and whitespace (formatting whitespace between HTML tags), ignore it
       if (!text.replace(/[\r\n\t ]+/g, '')) return '';
       // Replace newline characters inside inline text with a space so text doesn't drop to next line
@@ -372,10 +368,21 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
           if (parts.length === 2) {
             const key = parts[0].trim().toLowerCase();
             const val = parts[1].trim();
-            if (key === 'color') style.color = val;
+            if (key === 'text-align') style.textAlign = val;
+            else if (key === 'color') style.color = val;
             else if (key === 'font-weight' && (val === 'bold' || parseInt(val) >= 700)) style.fontFamily = 'Helvetica-Bold';
             else if (key === 'font-style' && val === 'italic') style.fontFamily = style.fontFamily === 'Helvetica-Bold' ? 'Helvetica-BoldOblique' : 'Helvetica-Oblique';
             else if (key === 'text-decoration' && val.includes('underline')) style.textDecoration = 'underline';
+            else if (key === 'text-decoration' && val.includes('line-through')) style.textDecoration = 'line-through';
+            else if (key === 'font-size') {
+              const ptMatch = val.match(/([\d.]+)pt/i);
+              const pxMatch = val.match(/([\d.]+)px/i);
+              if (ptMatch) style.fontSize = parseFloat(ptMatch[1]);
+              else if (pxMatch) style.fontSize = parseFloat(pxMatch[1]) * 0.75;
+            }
+            else if (key === 'background-color' || key === 'background') {
+              style.backgroundColor = val;
+            }
           }
         });
       }
@@ -383,10 +390,11 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
       if (tag === 'strong' || tag === 'b') style.fontFamily = 'Helvetica-Bold';
       if (tag === 'em' || tag === 'i') style.fontFamily = style.fontFamily === 'Helvetica-Bold' ? 'Helvetica-BoldOblique' : 'Helvetica-Oblique';
       if (tag === 'u') style.textDecoration = 'underline';
+      if (tag === 's' || tag === 'del' || tag === 'strike') style.textDecoration = 'line-through';
+      if (tag === 'mark') style.backgroundColor = '#ffeb3b';
 
       const children = Array.from(node.childNodes)
         .map((child, idx) => processInlineNode(child, `${keyPrefix}-${idx}`, style))
-        .flat(Infinity)
         .filter(Boolean);
 
       return children;
@@ -394,118 +402,291 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
     return '';
   };
 
-  const blockMargin = isCompact ? 1.6 : 2.2;
-  const listMargin = isCompact ? 1.6 : 2.2;
-  const listItemMargin = isCompact ? 1.0 : 1.8;
-  const fallbackMargin = isCompact ? 1.2 : 1.8;
+  const blockMargin = 2.5;
+  const listMargin = 2.0;
+  const listItemMargin = 1.5;
+  const fallbackMargin = 1.5;
 
-  const BLOCK_TAGS = ['p', 'div', 'ul', 'ol', 'table', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'section', 'article', 'header', 'footer'];
+  const renderCellContent = (cellNode, cellKey, baseCellStyle) => {
+    const childElements = Array.from(cellNode.children);
+    const hasBlocks = childElements.some(el =>
+      ['p', 'div', 'ul', 'ol', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(el.tagName.toLowerCase())
+    );
 
-  const hasBlockChildren = (el) => {
-    if (!el || el.nodeType !== 1) return false;
-    return Array.from(el.children).some(child => BLOCK_TAGS.includes(child.tagName.toLowerCase()));
+    if (hasBlocks) {
+      const renderedBlocks = childElements.map((childEl, elIdx) => {
+        let elStyle = { ...baseCellStyle };
+        let elAlign = baseCellStyle.textAlign;
+
+        const styleAttr = childEl.getAttribute && childEl.getAttribute('style');
+        if (styleAttr) {
+          styleAttr.split(';').forEach(item => {
+            const parts = item.split(':');
+            if (parts.length === 2) {
+              const k = parts[0].trim().toLowerCase();
+              const v = parts[1].trim();
+              if (k === 'text-align') elAlign = v;
+              else if (k === 'color') elStyle.color = v;
+              else if (k === 'font-weight' && (v === 'bold' || parseInt(v) >= 700)) elStyle.fontFamily = 'Helvetica-Bold';
+            }
+          });
+        }
+        if (childEl.getAttribute && childEl.getAttribute('align')) {
+          elAlign = childEl.getAttribute('align');
+        }
+
+        const inlineNodes = Array.from(childEl.childNodes)
+          .map((c, cIdx) => processInlineNode(c, `${cellKey}-${elIdx}-${cIdx}`, elStyle))
+          .flat(Infinity)
+          .filter(Boolean);
+
+        if (inlineNodes.length === 0) return null;
+
+        return (
+          <View key={`${cellKey}-block-${elIdx}`} style={{ width: '100%', marginBottom: elIdx < childElements.length - 1 ? 1.5 : 0 }}>
+            <Text style={{ ...elStyle, textAlign: elAlign, marginTop: 0, marginBottom: 0, padding: 0 }}>
+              {inlineNodes}
+            </Text>
+          </View>
+        );
+      }).filter(Boolean);
+
+      if (renderedBlocks.length > 0) return renderedBlocks;
+    }
+
+    const inlineNodes = Array.from(cellNode.childNodes)
+      .map((c, cIdx) => processInlineNode(c, `${cellKey}-${cIdx}`, baseCellStyle))
+      .flat(Infinity)
+      .filter(Boolean);
+
+    return (
+      <Text style={{ ...baseCellStyle, marginTop: 0, marginBottom: 0, padding: 0 }}>
+        {inlineNodes.length > 0 ? inlineNodes : ' '}
+      </Text>
+    );
   };
 
-  // Render HTML Table inside description
-  const renderTableNode = (tableNode, keyIndex) => {
+  const getTableColumnWidths = (tableNode, numCols) => {
+    if (numCols <= 0) return [];
+    const colWidths = new Array(numCols).fill(null);
+
+    const cols = Array.from(tableNode.querySelectorAll('col'));
+    cols.forEach((col, idx) => {
+      if (idx < numCols) {
+        const style = col.getAttribute('style') || '';
+        const wAttr = col.getAttribute('width') || '';
+        const m = style.match(/width:\s*([\d.]+)%/i) || wAttr.match(/([\d.]+)%/);
+        if (m) colWidths[idx] = parseFloat(m[1]);
+      }
+    });
+
     const rows = Array.from(tableNode.querySelectorAll('tr'));
-    if (rows.length === 0) return null;
+    for (const row of rows) {
+      const cells = Array.from(row.children).filter(c => c.tagName && ['td', 'th'].includes(c.tagName.toLowerCase()));
+      cells.forEach((cell, idx) => {
+        if (idx < numCols && colWidths[idx] === null) {
+          const style = cell.getAttribute('style') || '';
+          const wAttr = cell.getAttribute('width') || '';
+          const m = style.match(/width:\s*([\d.]+)%/i) || wAttr.match(/([\d.]+)%/);
+          if (m) {
+            colWidths[idx] = parseFloat(m[1]);
+          }
+        }
+      });
+    }
+
+    const allFound = colWidths.every(w => w !== null && w > 0);
+    if (allFound) {
+      const sum = colWidths.reduce((a, b) => a + b, 0);
+      if (sum > 0) {
+        return colWidths.map(w => `${((w / sum) * 100).toFixed(2)}%`);
+      }
+    }
+
+    const foundSum = colWidths.reduce((a, b) => a + (b || 0), 0);
+    const nullCount = colWidths.filter(w => w === null).length;
+    if (nullCount > 0 && nullCount < numCols && foundSum < 100) {
+      const remEach = (100 - foundSum) / nullCount;
+      return colWidths.map(w => `${(w !== null ? w : remEach).toFixed(2)}%`);
+    }
+
+    if (numCols === 2) {
+      return ['70%', '30%'];
+    }
+    if (numCols === 3) {
+      return ['50%', '25%', '25%'];
+    }
+    const equalPct = (100 / numCols).toFixed(2);
+    return new Array(numCols).fill(`${equalPct}%`);
+  };
+
+  const renderTableNode = (tableNode, keyIndex) => {
+    let rowNodes = [];
+    const directRows = Array.from(tableNode.children).filter(el => el.tagName && el.tagName.toLowerCase() === 'tr');
+    if (directRows.length > 0) {
+      rowNodes = directRows;
+    } else {
+      const sections = Array.from(tableNode.children).filter(el =>
+        el.tagName && ['thead', 'tbody', 'tfoot'].includes(el.tagName.toLowerCase())
+      );
+      sections.forEach(sec => {
+        const secRows = Array.from(sec.children).filter(el => el.tagName && el.tagName.toLowerCase() === 'tr');
+        rowNodes.push(...secRows);
+      });
+      if (rowNodes.length === 0) {
+        rowNodes = Array.from(tableNode.querySelectorAll('tr'));
+      }
+    }
+
+    if (rowNodes.length === 0) return null;
+
+    const validRows = rowNodes.filter(r => {
+      const c = Array.from(r.children).filter(el => el.tagName && ['td', 'th'].includes(el.tagName.toLowerCase()));
+      return c.length > 0;
+    });
+
+    if (validRows.length === 0) return null;
 
     let maxCols = 0;
-    const rowData = rows.map(tr => {
-      const cells = Array.from(tr.children).filter(el => ['th', 'td'].includes(el.tagName.toLowerCase()));
-      if (cells.length > maxCols) maxCols = cells.length;
-      return {
-        isHeader: tr.parentElement?.tagName.toLowerCase() === 'thead' || cells.some(c => c.tagName.toLowerCase() === 'th'),
-        cells
-      };
+    validRows.forEach(r => {
+      let rowCols = 0;
+      Array.from(r.children).forEach(c => {
+        if (c.tagName && ['td', 'th'].includes(c.tagName.toLowerCase())) {
+          const span = parseInt(c.getAttribute('colspan') || '1', 10);
+          rowCols += isNaN(span) || span < 1 ? 1 : span;
+        }
+      });
+      if (rowCols > maxCols) maxCols = rowCols;
     });
 
     if (maxCols === 0) return null;
 
-    const getColWidth = (colIdx, totalCols, cell) => {
-      const styleAttr = cell?.getAttribute && cell.getAttribute('style');
-      if (styleAttr) {
-        const match = styleAttr.match(/width\s*:\s*(\d+(?:\.\d+)?)(%|px)?/i);
-        if (match && match[2] === '%') return `${match[1]}%`;
-      }
-      if (totalCols === 2) {
-        return colIdx === 0 ? '68%' : '32%';
-      }
-      return `${(100 / totalCols).toFixed(1)}%`;
-    };
-
-    const tableFontSize = isCompact ? 8.6 : 9.0;
+    const colWidths = getTableColumnWidths(tableNode, maxCols);
 
     return (
-      <View key={`tbl-${keyIndex}`} style={{
-        width: '100%',
-        marginTop: isCompact ? 2.0 : 3,
-        marginBottom: isCompact ? 3.0 : 4,
-        borderTopWidth: 1,
-        borderTopColor: '#000000',
-        borderLeftWidth: 1,
-        borderLeftColor: '#000000',
-        borderRightWidth: 1,
-        borderRightColor: '#000000',
-        borderBottomWidth: 1,
-        borderBottomColor: '#000000',
-      }}>
-        {rowData.map((row, rIdx) => {
-          const rowText = row.cells.map(c => c.textContent || '').join(' ').toLowerCase();
+      <View
+        key={`tbl-${keyIndex}`}
+        style={{
+          width: '100%',
+          marginTop: isExtraCompact ? 1.5 : 2.5,
+          marginBottom: isExtraCompact ? 2.5 : 4,
+          borderWidth: 1,
+          borderColor: '#000000',
+          borderStyle: 'solid',
+        }}
+      >
+        {validRows.map((rowNode, rIdx) => {
+          const isLastRow = rIdx === validRows.length - 1;
+          const cells = Array.from(rowNode.children).filter(c => c.tagName && ['td', 'th'].includes(c.tagName.toLowerCase()));
+          const isInsideThead = rowNode.parentElement && rowNode.parentElement.tagName.toLowerCase() === 'thead';
+          const allTh = cells.every(c => c.tagName.toLowerCase() === 'th');
+          const isHeaderRow = isInsideThead || allTh;
+
+          const rowText = (rowNode.textContent || '').toLowerCase();
           const isTotalRow = rowText.includes('total');
-          const isHeaderRow = row.isHeader || (rIdx === 0 && row.cells.some(c => c.tagName.toLowerCase() === 'th'));
-          const rowBg = isHeaderRow ? '#f0f0f0' : (isTotalRow ? '#f9f9f9' : '#ffffff');
-          const isLastRow = rIdx === rowData.length - 1;
+
+          let rowBg = isHeaderRow ? '#f0f0f0' : (isTotalRow ? '#f9f9f9' : '#ffffff');
+          const rowStyleAttr = rowNode.getAttribute && rowNode.getAttribute('style');
+          if (rowStyleAttr) {
+            rowStyleAttr.split(';').forEach(item => {
+              const parts = item.split(':');
+              if (parts.length === 2) {
+                const k = parts[0].trim().toLowerCase();
+                const v = parts[1].trim();
+                if (k === 'background-color' || k === 'background') rowBg = v;
+              }
+            });
+          }
+
+          let currentColIdx = 0;
 
           return (
-            <View key={`tr-${keyIndex}-${rIdx}`} style={{
-              flexDirection: 'row',
-              backgroundColor: rowBg,
-              borderBottomWidth: isLastRow ? 0 : 1,
-              borderBottomColor: '#000000',
-              minHeight: isCompact ? 15 : 18,
-              alignItems: 'center',
-            }}>
-              {row.cells.map((cell, cIdx) => {
-                const isFirstCol = cIdx === 0;
-                const isLastCol = cIdx === row.cells.length - 1;
-                const colWidth = getColWidth(cIdx, row.cells.length, cell);
-                const isTh = cell.tagName.toLowerCase() === 'th';
-                const isBold = isHeaderRow || isTh || isTotalRow;
+            <View
+              key={`tr-${keyIndex}-${rIdx}`}
+              wrap={false}
+              style={{
+                flexDirection: 'row',
+                width: '100%',
+                borderBottomWidth: isLastRow ? 0 : 1,
+                borderBottomColor: '#000000',
+                borderBottomStyle: 'solid',
+                backgroundColor: rowBg,
+                minHeight: 18,
+                alignItems: 'stretch',
+              }}
+            >
+              {cells.map((cellNode, cIdx) => {
+                const tag = cellNode.tagName.toLowerCase();
+                const isTh = tag === 'th';
+                const colSpan = parseInt(cellNode.getAttribute('colspan') || '1', 10);
+                const actualSpan = isNaN(colSpan) || colSpan < 1 ? 1 : colSpan;
 
-                let cellAlign = isFirstCol ? 'left' : (row.cells.length === 2 ? 'right' : 'center');
-                if (cell.getAttribute && cell.getAttribute('align')) {
-                  cellAlign = cell.getAttribute('align');
-                } else if (cell.style && cell.style.textAlign) {
-                  cellAlign = cell.style.textAlign;
+                let cellWidthPct = 0;
+                for (let s = 0; s < actualSpan; s++) {
+                  const idx = currentColIdx + s;
+                  if (idx < colWidths.length) {
+                    cellWidthPct += parseFloat(colWidths[idx]);
+                  }
+                }
+                currentColIdx += actualSpan;
+                const isLastCell = cIdx === cells.length - 1 || currentColIdx >= maxCols;
+                const cellWidth = `${Math.min(cellWidthPct, 100).toFixed(2)}%`;
+
+                let cellAlign = isHeaderRow || isTh ? 'center' : 'left';
+                let cellFontFamily = (isHeaderRow || isTh || isTotalRow) ? 'Helvetica-Bold' : 'Helvetica';
+                let cellColor = '#000000';
+                let cellBg = rowBg;
+
+                const styleAttr = cellNode.getAttribute && cellNode.getAttribute('style');
+                if (styleAttr) {
+                  styleAttr.split(';').forEach(item => {
+                    const parts = item.split(':');
+                    if (parts.length === 2) {
+                      const k = parts[0].trim().toLowerCase();
+                      const v = parts[1].trim();
+                      if (k === 'text-align') cellAlign = v;
+                      else if (k === 'color') cellColor = v;
+                      else if (k === 'font-weight' && (v === 'bold' || parseInt(v) >= 700)) cellFontFamily = 'Helvetica-Bold';
+                      else if (k === 'background-color' || k === 'background') cellBg = v;
+                    }
+                  });
+                }
+                if (cellNode.getAttribute && cellNode.getAttribute('align')) {
+                  cellAlign = cellNode.getAttribute('align');
+                }
+                if (cellNode.getAttribute && cellNode.getAttribute('bgcolor')) {
+                  cellBg = cellNode.getAttribute('bgcolor');
                 }
 
-                const cellInlineContent = Array.from(cell.childNodes)
-                  .map((child, idx) => processInlineNode(child, `c-${keyIndex}-${rIdx}-${cIdx}-${idx}`, {
-                    fontFamily: isBold ? 'Helvetica-Bold' : 'Helvetica',
-                    fontSize: tableFontSize,
-                  }))
-                  .flat(Infinity)
-                  .filter(Boolean);
+                const baseCellStyle = {
+                  ...customStyle,
+                  fontSize: isExtraCompact ? 8.0 : Math.max((customStyle?.fontSize || 9.5) - 0.5, 8.5),
+                  fontFamily: cellFontFamily,
+                  color: cellColor,
+                  textAlign: cellAlign,
+                  lineHeight: 1.25,
+                  marginTop: 0,
+                  marginBottom: 0,
+                  padding: 0,
+                };
 
                 return (
-                  <View key={`td-${keyIndex}-${rIdx}-${cIdx}`} style={{
-                    width: colWidth,
-                    paddingVertical: isCompact ? 1.6 : 2.5,
-                    paddingHorizontal: isCompact ? 4.0 : 5,
-                    borderRightWidth: isLastCol ? 0 : 1,
-                    borderRightColor: '#000000',
-                    justifyContent: 'center',
-                  }}>
-                    <Text style={{
-                      fontSize: tableFontSize,
-                      fontFamily: isBold ? 'Helvetica-Bold' : 'Helvetica',
-                      textAlign: cellAlign,
-                      lineHeight: 1.25,
-                    }}>
-                      {cellInlineContent.length > 0 ? cellInlineContent : ""}
-                    </Text>
+                  <View
+                    key={`td-${keyIndex}-${rIdx}-${cIdx}`}
+                    style={{
+                      width: cellWidth,
+                      backgroundColor: cellBg,
+                      borderRightWidth: isLastCell ? 0 : 1,
+                      borderRightColor: '#000000',
+                      borderRightStyle: 'solid',
+                      paddingTop: isExtraCompact ? 1.5 : 2.5,
+                      paddingBottom: isExtraCompact ? 1.5 : 2.5,
+                      paddingLeft: isExtraCompact ? 3 : 4,
+                      paddingRight: isExtraCompact ? 3 : 4,
+                      justifyContent: 'center',
+                    }}
+                  >
+                    {renderCellContent(cellNode, `c-${keyIndex}-${rIdx}-${cIdx}`, baseCellStyle)}
                   </View>
                 );
               })}
@@ -516,10 +697,11 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
     );
   };
 
-  // Process block node (returns <View> containing <Text>)
+  // Process block node (returns <View> containing <Text> or table)
   const renderBlockNode = (node, keyIndex) => {
     if (node.nodeType === 3) {
-      const text = cleanCurrencyText(node.textContent).trim();
+      let text = node.textContent.replace(/&nbsp;/g, ' ').replace(/\u00A0/g, ' ').trim();
+      text = formatCurrencyInText(text);
       if (!text) return null;
       return (
         <View key={`blk-${keyIndex}`} style={{ marginBottom: fallbackMargin, width: '100%' }}>
@@ -534,18 +716,27 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
         return null;
       }
 
-      // Handle HTML Table
       if (tag === 'table') {
         return renderTableNode(node, keyIndex);
       }
 
-      // Handle generic block containers that contain child block elements (e.g. wrapper div, section)
-      if (['div', 'section', 'article', 'blockquote', 'header', 'footer'].includes(tag) && hasBlockChildren(node)) {
-        const childBlocks = Array.from(node.childNodes)
-          .map((child, idx) => renderBlockNode(child, `${keyIndex}-${idx}`))
-          .flat(Infinity)
-          .filter(Boolean);
-        return childBlocks;
+      if (['div', 'section'].includes(tag)) {
+        const hasBlockChildren = Array.from(node.children).some(child =>
+          ['table', 'p', 'div', 'ul', 'ol', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'section'].includes(child.tagName.toLowerCase())
+        );
+        if (hasBlockChildren) {
+          const renderedChildren = Array.from(node.childNodes)
+            .map((child, idx) => renderBlockNode(child, `${keyIndex}-${idx}`))
+            .filter(Boolean);
+          if (renderedChildren.length > 0) {
+            return (
+              <View key={`blk-${keyIndex}`} style={{ width: '100%', marginBottom: blockMargin }}>
+                {renderedChildren}
+              </View>
+            );
+          }
+          return null;
+        }
       }
 
       let blockStyle = { ...customStyle, marginTop: 0, marginBottom: 0, padding: 0 };
@@ -568,13 +759,27 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
         textAlign = node.getAttribute('align');
       }
 
-      if (['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'div'].includes(tag)) {
+      if (['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'div', 'section'].includes(tag)) {
         const rawText = (node.textContent || '').replace(/[\s\u00A0&nbsp;]+/g, '');
         if (rawText.length === 0) {
           return null; // Ignore completely blank paragraphs
         }
 
-        if (tag.startsWith('h')) {
+        let headingMargin = blockMargin;
+        if (tag === 'h1') {
+          blockStyle.fontSize = (customStyle?.fontSize || 9.5) * 1.35;
+          blockStyle.fontFamily = 'Helvetica-Bold';
+          headingMargin = blockMargin * 1.4;
+        } else if (tag === 'h2') {
+          blockStyle.fontSize = (customStyle?.fontSize || 9.5) * 1.2;
+          blockStyle.fontFamily = 'Helvetica-Bold';
+          headingMargin = blockMargin * 1.25;
+        } else if (tag === 'h3') {
+          blockStyle.fontSize = (customStyle?.fontSize || 9.5) * 1.1;
+          blockStyle.fontFamily = 'Helvetica-Bold';
+          headingMargin = blockMargin * 1.15;
+        } else if (['h4', 'h5', 'h6'].includes(tag)) {
+          blockStyle.fontSize = (customStyle?.fontSize || 9.5) * 1.05;
           blockStyle.fontFamily = 'Helvetica-Bold';
         }
 
@@ -587,10 +792,8 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
           return null;
         }
         return (
-          <View key={`blk-${keyIndex}`} style={{ marginBottom: blockMargin, width: '100%' }}>
-            <Text style={{ ...blockStyle, width: '100%', textAlign, marginTop: 0, marginBottom: 0, padding: 0 }}>
-              {inlineContent.length > 0 ? inlineContent : ""}
-            </Text>
+          <View key={`blk-${keyIndex}`} style={{ marginBottom: headingMargin, width: '100%' }}>
+            <Text style={{ ...blockStyle, width: '100%', textAlign, marginTop: 0, marginBottom: 0, padding: 0 }}>{inlineContent}</Text>
           </View>
         );
       }
@@ -602,7 +805,7 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
         if (validListItems.length === 0) return null;
 
         return (
-          <View key={`blk-${keyIndex}`} style={{ marginBottom: listMargin, paddingLeft: isCompact ? 3 : 6, width: '100%' }}>
+          <View key={`blk-${keyIndex}`} style={{ marginBottom: listMargin, paddingLeft: isExtraCompact ? 2 : 6, width: '100%' }}>
             {validListItems.map((liNode, liIdx) => {
               const inlineContent = Array.from(liNode.childNodes)
                 .map((child, idx) => processInlineNode(child, `li-${keyIndex}-${liIdx}-${idx}`, {}))
@@ -620,9 +823,7 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
                     {tag === 'ol' ? `${liIdx + 1}.` : '•'}
                   </Text>
                   <View style={{ flex: 1 }}>
-                    <Text style={{ ...blockStyle, textAlign, marginTop: 0, marginBottom: 0, padding: 0 }}>
-                      {inlineContent.length > 0 ? inlineContent : ""}
-                    </Text>
+                    <Text style={{ ...blockStyle, textAlign, marginTop: 0, marginBottom: 0, padding: 0 }}>{inlineContent}</Text>
                   </View>
                 </View>
               );
@@ -636,15 +837,12 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
 
       const inlineContent = Array.from(node.childNodes)
         .map((child, idx) => processInlineNode(child, `fallback-${keyIndex}-${idx}`, {}))
-        .flat(Infinity)
         .filter(Boolean);
 
       if (inlineContent.length === 0) return null;
       return (
         <View key={`blk-${keyIndex}`} style={{ marginBottom: fallbackMargin, width: '100%' }}>
-          <Text style={{ ...blockStyle, width: '100%', textAlign, marginTop: 0, marginBottom: 0, padding: 0 }}>
-            {inlineContent.length > 0 ? inlineContent : ""}
-          </Text>
+          <Text style={{ ...blockStyle, width: '100%', textAlign, marginTop: 0, marginBottom: 0, padding: 0 }}>{inlineContent}</Text>
         </View>
       );
     }
@@ -654,7 +852,6 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
 
   const blockNodes = Array.from(doc.body.childNodes)
     .map((node, i) => renderBlockNode(node, i))
-    .flat(Infinity)
     .filter(Boolean);
 
   if (blockNodes.length === 0) {
@@ -672,54 +869,58 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
 const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
   const getVisibleTextLength = (html) => {
     if (!html) return 0;
+    const trCount = (html.match(/<tr/gi) || []).length;
     const clean = html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/\u00A0/g, ' ');
-    return clean.length;
+    return clean.length + (trCount * 50);
   };
+
+  const hasInnerTable = subscriptionItems.some(item =>
+    (item.subscription && item.subscription.includes('<table')) ||
+    (item.serialNumber && item.serialNumber.includes('<table'))
+  );
 
   const totalTextLength = subscriptionItems.reduce((acc, item) => {
     return acc + getVisibleTextLength(item.serialNumber) + getVisibleTextLength(item.subscription);
   }, 0);
 
-  // Dynamic layout settings:
-  // When table content is detailed (lists, breakdown table, multiple rows, or text > 300),
-  // the table acquires full space on Page 1, and the amount/payment/declaration/signature
-  // block dynamically breaks to Page 2 so nothing gets squeezed.
-  const isTableFullPage = totalTextLength > 300 || subscriptionItems.length > 2 || subscriptionItems.some(i => (i.subscription || '').includes('<li') || (i.subscription || '').includes('<table'));
-  const isCompact = isTableFullPage;
+  // Dynamic layout settings - comfortable, readable, natural pagination across 2 pages
+  const isCompact = totalTextLength > 250 || subscriptionItems.length > 1 || hasInnerTable;
+  const isExtraCompact = totalTextLength > 500 || (hasInnerTable && totalTextLength > 350) || subscriptionItems.length > 2;
+  const isUltraCompact = false;
 
-  const logoWidth = 200;
-  const logoHeight = 50;
-  const headerBottomMargin = 4;
-  const headerRowMargin = 2;
-  const clientInfoMarginBottom = 3;
-  const clientInfoRowMarginBottom = 1.2;
-  const tableHeaderMarginTop = 3;
-  const tableMarginBottom = 4;
-  const tableHeaderMinHeight = isCompact ? 19 : 22;
-  const tableCellPadding = isCompact ? 3.2 : 4.0;
-  const tableFontSize = 9.15;
-  const amountFontSize = 12.0;
-  const noteFontSize = 10.5;
-  const wordAmountFontSize = 9.5;
-  const amountSectionPadding = 4.0;
-  const spacingMargin = 5;
-  const sectionHeaderFont = 11.5;
-  const sectionHeaderMarginBottom = 3;
-  const paymentLabelFont = 9.0;
-  const paymentValFont = 9.0;
-  const paymentMarginBottom = 2.5;
-  const declarationTextFont = 8.5;
-  const declarationItemFont = 8.0;
-  const declarationItemLineHeight = 1.22;
-  const signatureSectionMarginTop = 12;
-  const signatureImageWidth = 115;
-  const signatureImageHeight = 48;
-  const signatureLabelFont = 10.0;
+  const logoWidth = isExtraCompact ? 190 : (isCompact ? 210 : 240);
+  const logoHeight = isExtraCompact ? 50 : (isCompact ? 58 : 68);
+  const headerBottomMargin = isExtraCompact ? 4 : (isCompact ? 5 : 8);
+  const headerRowMargin = isExtraCompact ? 1.5 : (isCompact ? 2 : 4);
+  const clientInfoMarginBottom = isExtraCompact ? 2.5 : (isCompact ? 3 : 5);
+  const clientInfoRowMarginBottom = isExtraCompact ? 1 : (isCompact ? 1.5 : 2.5);
+  const tableHeaderMarginTop = isExtraCompact ? 4 : (isCompact ? 6 : 8);
+  const tableMarginBottom = isExtraCompact ? 4 : (isCompact ? 6 : 8);
+  const tableHeaderMinHeight = isExtraCompact ? 20 : 24;
+  const tableCellPadding = isExtraCompact ? 2.5 : (isCompact ? 3.5 : 4.5);
+  const tableFontSize = isExtraCompact ? 8.5 : (isCompact ? 9.0 : 9.5);
+  const amountFontSize = isExtraCompact ? 11 : (isCompact ? 12 : 13.5);
+  const noteFontSize = isExtraCompact ? 9.5 : (isCompact ? 10.5 : 12);
+  const wordAmountFontSize = isExtraCompact ? 8.5 : (isCompact ? 9.5 : 10.5);
+  const amountSectionPadding = isExtraCompact ? 2 : (isCompact ? 3 : 4);
+  const spacingMargin = isExtraCompact ? 3 : (isCompact ? 5 : 8);
+  const sectionHeaderFont = isExtraCompact ? 10 : (isCompact ? 11 : 12.5);
+  const sectionHeaderMarginBottom = isExtraCompact ? 2 : (isCompact ? 3 : 4);
+  const paymentLabelFont = isExtraCompact ? 8.5 : (isCompact ? 9.0 : 10.0);
+  const paymentValFont = isExtraCompact ? 8.5 : (isCompact ? 9.0 : 10.0);
+  const paymentMarginBottom = isExtraCompact ? 1.5 : (isCompact ? 2.5 : 3.5);
+  const declarationTextFont = isExtraCompact ? 8.0 : (isCompact ? 8.5 : 9.5);
+  const declarationItemFont = isExtraCompact ? 7.5 : (isCompact ? 8.0 : 9.0);
+  const declarationItemLineHeight = 1.2;
+  const signatureSectionMarginTop = isExtraCompact ? 8 : (isCompact ? 12 : 16);
+  const signatureImageWidth = isExtraCompact ? 100 : (isCompact ? 110 : 125);
+  const signatureImageHeight = isExtraCompact ? 40 : (isCompact ? 48 : 56);
+  const signatureLabelFont = isExtraCompact ? 9.0 : (isCompact ? 10.0 : 11.0);
 
   const cellStyle = {
     ...styles.tableCell,
     fontSize: tableFontSize,
-    lineHeight: 1.26,
+    lineHeight: 1.28,
     marginTop: 0,
     marginBottom: 0,
     padding: 0
@@ -746,11 +947,11 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
               <Text style={{ fontSize: 10.0, fontFamily: 'Helvetica-Bold', lineHeight: 1.2 }}>Zirakpur, Punjab Pin : 140603</Text>
             </View>
           </View>
-          <View style={{ backgroundColor: '#000000', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: 18, width: 260 }}>
+          <View style={{ backgroundColor: '#000000', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: isExtraCompact ? 16 : 18, width: 260 }}>
             <Svg viewBox="0 0 24 24" style={{ width: 10, height: 10, marginRight: 4 }}>
               <Path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" fill="#ffffff" />
             </Svg>
-            <Text style={{ color: '#ffffff', fontSize: 9.5, fontFamily: 'Helvetica-Bold' }}>90414-99964/73</Text>
+            <Text style={{ color: '#ffffff', fontSize: isExtraCompact ? 8.5 : 9.5, fontFamily: 'Helvetica-Bold' }}>90414-99964/73</Text>
           </View>
         </View>
 
@@ -762,13 +963,13 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
 
       {/* No. & Dated Row */}
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: headerRowMargin, marginBottom: headerRowMargin }}>
-        <Text style={{ fontSize: 10.5, fontFamily: 'Helvetica-Bold' }}>
+        <Text style={{ fontSize: isExtraCompact ? 9.5 : (isCompact ? 10.0 : 10.5), fontFamily: 'Helvetica-Bold' }}>
           No. {quotationInfo.number}
         </Text>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <Text style={{ fontSize: 10.5, fontFamily: 'Helvetica-Bold', marginRight: 10 }}>Dated</Text>
-          <View style={{ borderBottomWidth: 1, borderColor: '#000000', width: 130, alignItems: 'center' }}>
-            <Text style={{ fontSize: 10.5, fontFamily: 'Helvetica-Bold', marginBottom: 2 }}>{quotationInfo.date}</Text>
+          <Text style={{ fontSize: isExtraCompact ? 9.5 : (isCompact ? 10.0 : 10.5), fontFamily: 'Helvetica-Bold', marginRight: 10 }}>Dated</Text>
+          <View style={{ borderBottomWidth: 1, borderColor: '#000000', width: isExtraCompact ? 100 : 130, alignItems: 'center' }}>
+            <Text style={{ fontSize: isExtraCompact ? 9.5 : (isCompact ? 10.0 : 10.5), fontFamily: 'Helvetica-Bold', marginBottom: 2 }}>{quotationInfo.date}</Text>
           </View>
         </View>
       </View>
@@ -785,9 +986,9 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
         <View style={{ marginBottom: clientInfoMarginBottom }}>
           {/* Business Name Row */}
           <View style={{ flexDirection: 'row', alignItems: 'flex-end', marginBottom: clientInfoRowMarginBottom }}>
-            <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', width: 95 }}>Business Name</Text>
+            <Text style={{ fontSize: isExtraCompact ? 9 : 10, fontFamily: 'Helvetica-Bold', width: 95 }}>Business Name</Text>
             <View style={{ borderBottomWidth: 1, borderColor: '#000000', flex: 1, paddingBottom: clientInfoRowMarginBottom, paddingLeft: 4 }}>
-              <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold' }} maxLines={1}>
+              <Text style={{ fontSize: isExtraCompact ? 9 : 10, fontFamily: 'Helvetica-Bold' }} maxLines={1}>
                 {(formData.clientName || '').replace(/[\r\n]+/g, ' ').trim()}
               </Text>
             </View>
@@ -795,9 +996,9 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
 
           {/* Address Row */}
           <View style={{ flexDirection: 'row', alignItems: 'flex-end', marginBottom: clientInfoRowMarginBottom }}>
-            <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', width: 95 }}>Address</Text>
+            <Text style={{ fontSize: isExtraCompact ? 9 : 10, fontFamily: 'Helvetica-Bold', width: 95 }}>Address</Text>
             <View style={{ borderBottomWidth: 1, borderColor: '#000000', flex: 1, paddingBottom: clientInfoRowMarginBottom, paddingLeft: 4 }}>
-              <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold' }} maxLines={1}>
+              <Text style={{ fontSize: isExtraCompact ? 9 : 10, fontFamily: 'Helvetica-Bold' }} maxLines={1}>
                 {(formData.address || '').replace(/[\r\n]+/g, ', ').trim()}
               </Text>
             </View>
@@ -806,17 +1007,17 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
           {/* Contact & Phone Row */}
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
             <View style={{ flexDirection: 'row', alignItems: 'flex-end', width: '48%' }}>
-              <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', width: 95 }}>Contact Person</Text>
+              <Text style={{ fontSize: isExtraCompact ? 9 : 10, fontFamily: 'Helvetica-Bold', width: 95 }}>Contact Person</Text>
               <View style={{ borderBottomWidth: 1, borderColor: '#000000', flex: 1, paddingBottom: clientInfoRowMarginBottom, paddingLeft: 4 }}>
-                <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold' }} maxLines={1}>
+                <Text style={{ fontSize: isExtraCompact ? 9 : 10, fontFamily: 'Helvetica-Bold' }} maxLines={1}>
                   {(formData.contactPerson || '').replace(/[\r\n]+/g, ' ').trim()}
                 </Text>
               </View>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'flex-end', width: '48%' }}>
-              <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', width: 85 }}>Phone/Mobile</Text>
+              <Text style={{ fontSize: isExtraCompact ? 9 : 10, fontFamily: 'Helvetica-Bold', width: 85 }}>Phone/Mobile</Text>
               <View style={{ borderBottomWidth: 1, borderColor: '#000000', flex: 1, paddingBottom: clientInfoRowMarginBottom, paddingLeft: 4 }}>
-                <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold' }} maxLines={1}>
+                <Text style={{ fontSize: isExtraCompact ? 9 : 10, fontFamily: 'Helvetica-Bold' }} maxLines={1}>
                   {(formData.phone || '').replace(/[\r\n]+/g, ' ').trim()}
                 </Text>
               </View>
@@ -825,7 +1026,7 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
         </View>
 
         {/* Unified Subscription Table (Word Layout Rules) */}
-        <View style={[styles.table, { marginTop: tableHeaderMarginTop, marginBottom: tableMarginBottom }]} wrap={false}>
+        <View style={[styles.table, { marginTop: tableHeaderMarginTop, marginBottom: tableMarginBottom }]}>
           {/* Table Header */}
           <View style={[styles.tableHeaderRow, { minHeight: tableHeaderMinHeight }]}>
             <View style={styles.tableHeaderColLeft}>
@@ -848,7 +1049,6 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
                   marginTop: -2,
                 }
               ]}
-              wrap={false}
             >
               {/* Left column label — fixed 20% width */}
               <View
@@ -870,6 +1070,7 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
                   customStyle={{ ...cellStyle, fontFamily: 'Helvetica-Bold', textAlign: 'center' }}
                   verticalAlignment={formData.verticalAlignment}
                   isCompact={isCompact}
+                  isExtraCompact={isExtraCompact}
                 />
               </View>
               {/* Right column content — 80% width */}
@@ -888,17 +1089,17 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
                   customStyle={{ ...cellStyle, fontFamily: 'Helvetica' }}
                   verticalAlignment={formData.verticalAlignment}
                   isCompact={isCompact}
+                  isExtraCompact={isExtraCompact}
                 />
               </View>
             </View>
           ))}
         </View>
 
-        {/* Dynamic Financial & Sign-off Section (Amount, Payment Details, Declaration, Signatures) */}
-        <View style={{ marginTop: spacingMargin }} wrap={false}>
+        <View style={{ marginTop: isExtraCompact ? 2 : 6 }}>
           {/* Group 1: Amount Section & Cheques Note */}
-          <View>
-            <View style={[styles.amountSection, { padding: amountSectionPadding, marginTop: 2, marginBottom: 2 }]}>
+          <View wrap={false}>
+            <View style={[styles.amountSection, { padding: amountSectionPadding, marginTop: isExtraCompact ? 0 : 2, marginBottom: isExtraCompact ? 0 : 2 }]}>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, flexWrap: 'wrap' }}>
                 <Text style={[styles.amountText, { fontSize: amountFontSize }]}>AMOUNT</Text>
                 <Text style={[styles.amountText, { fontSize: amountFontSize }]}>
@@ -911,26 +1112,26 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
                 ) : <Text style={styles.amountText}>{""}</Text>}
                 {formData.amountCustomText ? (
                   <Text style={[styles.amountText, { fontSize: noteFontSize, color: '#2563EB', fontFamily: 'Helvetica-Bold' }]}>
-                    - {cleanCurrencyText(formData.amountCustomText)}
+                    - {formatCurrencyInText(formData.amountCustomText)}
                   </Text>
                 ) : <Text style={styles.amountText}>{""}</Text>}
               </View>
               {formData.amount ? (
-                <Text style={[styles.text, { textAlign: 'center', marginTop: 3, fontFamily: 'Helvetica-Bold', fontSize: wordAmountFontSize }]}>
+                <Text style={[styles.text, { textAlign: 'center', marginTop: isExtraCompact ? 1 : 4, fontFamily: 'Helvetica-Bold', fontSize: wordAmountFontSize }]}>
                   Amount in words: {numberToWords(formData.amount)}
                 </Text>
               ) : <Text style={styles.text}>{""}</Text>}
-              <Text style={[styles.text, { textAlign: 'center', marginTop: 2, fontFamily: 'Helvetica-Bold', marginBottom: 2, fontSize: wordAmountFontSize }]}>
+              <Text style={[styles.text, { textAlign: 'center', marginTop: isExtraCompact ? 1 : 4, fontFamily: 'Helvetica-Bold', marginBottom: isExtraCompact ? 1 : 2, fontSize: wordAmountFontSize }]}>
                 (GST EXTRA)
               </Text>
             </View>
-            <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: wordAmountFontSize, textAlign: 'center', marginTop: 3, color: '#FF0000', marginBottom: 3 }}>
+            <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: wordAmountFontSize, textAlign: 'center', marginTop: isExtraCompact ? 2 : 5, color: '#FF0000', marginBottom: isExtraCompact ? 2 : 5 }}>
               * Cheques should be drawn in favour of BiD
             </Text>
           </View>
 
           {/* Group 2: Payment Details */}
-          <View style={{ marginBottom: spacingMargin, marginTop: spacingMargin }}>
+          <View style={{ marginBottom: spacingMargin, marginTop: spacingMargin }} wrap={false}>
             <Text style={[styles.sectionHeader, { fontSize: sectionHeaderFont, marginTop: 0, marginBottom: sectionHeaderMarginBottom }]}>PAYMENT DETAILS</Text>
             <View style={styles.paymentGrid}>
               <View style={[styles.paymentItem, { marginBottom: paymentMarginBottom }]}>
@@ -953,10 +1154,10 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
           </View>
 
           {/* Group 3: Declaration & Signatures Grouped Together */}
-          <View style={{ marginTop: spacingMargin }}>
+          <View wrap={false} style={{ marginTop: spacingMargin }}>
             <View style={{ marginBottom: spacingMargin }}>
               <Text style={[styles.sectionHeader, { fontSize: sectionHeaderFont, marginTop: 0, marginBottom: sectionHeaderMarginBottom }]}>DECLARATION</Text>
-              <Text style={[styles.declarationText, { fontSize: declarationTextFont, marginBottom: 3 }]}>
+              <Text style={[styles.declarationText, { fontSize: declarationTextFont, marginBottom: isExtraCompact ? 2 : 4 }]}>
                 This is an application for Promotional services to BUILDING INDIA DIGITAL.
               </Text>
               {[
@@ -970,11 +1171,11 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
                 "I allow BUILDING INDIA DIGITAL to make commercial calls to my mobile number(s).",
                 "This declaration holds valid even if numbers registered for NDNC."
               ].map((item, index) => (
-                <Text key={index} style={[styles.declarationItem, { fontSize: declarationItemFont, lineHeight: declarationItemLineHeight, marginBottom: 1.5 }]}>• {item}</Text>
+                <Text key={index} style={[styles.declarationItem, { fontSize: declarationItemFont, lineHeight: declarationItemLineHeight, marginBottom: isExtraCompact ? 0.8 : 2.0 }]}>• {item}</Text>
               ))}
             </View>
 
-            <View style={[styles.signatureSection, { marginTop: signatureSectionMarginTop, minHeight: 40 }]}>
+            <View style={[styles.signatureSection, { marginTop: signatureSectionMarginTop, minHeight: isExtraCompact ? 35 : 45 }]}>
               <View style={styles.signatureBox}>
                 <Text style={[styles.signatureLabel, { fontSize: signatureLabelFont }]}>CLIENT SIGNATURE</Text>
                 <View style={{ height: 20, justifyContent: 'flex-end', alignItems: 'flex-start', marginTop: 0 }}>
@@ -983,7 +1184,7 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
               </View>
               <View style={styles.signatureBox}>
                 <Text style={[styles.signatureLabel, { fontSize: signatureLabelFont }]}>ORGANISATION SIGNATURE</Text>
-                <View style={{ marginTop: 2, alignItems: 'flex-start' }}>
+                <View style={{ marginTop: isExtraCompact ? 0 : 2, alignItems: 'flex-start' }}>
                   <Image src={signatureImage} style={[styles.signatureImage, { width: signatureImageWidth, height: signatureImageHeight }]} />
                 </View>
               </View>
@@ -1048,42 +1249,57 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
 // TinyMCE Editor Component  
 const TinyMCEEditor = ({ content, onClose, onSave }) => {
   const editorRef = useRef(null);
+  const [val, setVal] = useState(content || '');
 
   const handleSave = () => {
+    let finalContent = val;
     if (editorRef.current) {
-      const editorContent = editorRef.current.getContent();
-      onSave(editorContent);
+      finalContent = editorRef.current.getContent();
     }
+    onSave(finalContent);
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-auto">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold">Rich Text Editor</h3>
-          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
-            <X size={24} />
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl">
+        <div className="flex justify-between items-center mb-4 pb-2 border-b">
+          <div className="flex items-center gap-2">
+            <Edit3 size={20} className="text-blue-600" />
+            <h3 className="text-lg font-semibold text-gray-800">Rich Text Editor</h3>
+          </div>
+          <button onClick={handleSave} className="p-1.5 hover:bg-gray-100 rounded-full text-gray-500 hover:text-gray-700" title="Apply & Close">
+            <X size={20} />
           </button>
         </div>
-        <Editor
-          apiKey="g1kgvpz3sdqd2dq5uhk0i206p7ejh2ttx7drt78gh6tzah7g"
-          onInit={(evt, editor) => editorRef.current = editor}
-          initialValue={content}
-          init={{
-            height: 400,
-            menubar: true,
-            plugins: ['advlist', 'autolink', 'lists', 'link', 'image', 'charmap', 'preview', 'anchor', 'searchreplace', 'visualblocks', 'code', 'fullscreen', 'insertdatetime', 'media', 'table', 'code', 'help', 'wordcount'],
-            toolbar: 'undo redo | blocks | bold italic underline strikethrough | alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | forecolor backcolor | fontfamily fontsize | link image media | removeformat | help',
-            content_style: 'body { font-family:Arial,sans-serif; font-size:14px }'
-          }}
-        />
-        <div className="flex justify-end gap-2 mt-4">
-          <button onClick={onClose} className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600">
-            Cancel
-          </button>
-          <button onClick={handleSave} className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
-            Apply Changes
-          </button>
+        <div className="flex-1 min-h-[380px]">
+          <Editor
+            apiKey="g1kgvpz3sdqd2dq5uhk0i206p7ejh2ttx7drt78gh6tzah7g"
+            onInit={(evt, editor) => {
+              editorRef.current = editor;
+            }}
+            initialValue={content}
+            onEditorChange={(newContent) => {
+              setVal(newContent);
+            }}
+            init={{
+              height: 400,
+              menubar: true,
+              plugins: ['advlist', 'autolink', 'lists', 'link', 'image', 'charmap', 'preview', 'anchor', 'searchreplace', 'visualblocks', 'code', 'fullscreen', 'insertdatetime', 'media', 'table', 'code', 'help', 'wordcount'],
+              toolbar: 'undo redo | blocks | bold italic underline strikethrough | alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | table | forecolor backcolor | fontfamily fontsize | link image media | removeformat | help',
+              content_style: 'body { font-family:Arial,sans-serif; font-size:14px; margin: 10px; } table { border-collapse: collapse; width: 100%; } td, th { border: 1px solid #000; padding: 6px; } th { background-color: #f0f0f0; }'
+            }}
+          />
+        </div>
+        <div className="flex justify-between items-center mt-4 pt-3 border-t">
+          <span className="text-xs text-gray-500">Changes will reflect in parent preview and generated PDF.</span>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 font-medium text-sm">
+              Cancel
+            </button>
+            <button onClick={handleSave} className="px-5 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-semibold text-sm shadow flex items-center gap-1.5">
+              <Save size={16} /> Apply Changes
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -1179,21 +1395,21 @@ const useClickOutside = (ref, callback) => {
 
 // FormField Component
 const FormField = ({ label, value, onChange, type = 'text', rows = 1 }) => (
-  <div className="mb-2">
-    <label className="block text-xs font-semibold text-gray-700 mb-0.5">{label}</label>
+  <div className="mb-4">
+    <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
     {type === 'textarea' ? (
       <textarea
         value={value}
         onChange={(e) => onChange(e.target.value)}
         rows={rows}
-        className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
       />
     ) : (
       <input
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
       />
     )}
   </div>
@@ -1351,7 +1567,7 @@ const QuotationForm = () => {
   };
 
   const updateSubscriptionItem = (id, field, value) => {
-    setSubscriptionItems(subscriptionItems.map(item => item.id === id ? { ...item, [field]: value } : item));
+    setSubscriptionItems(prev => prev.map(item => item.id === id ? { ...item, [field]: value } : item));
   };
 
   const handleFormChange = (field, value) => setFormData(prev => ({ ...prev, [field]: value }));
@@ -1413,26 +1629,13 @@ const QuotationForm = () => {
     }
   };
 
-  const sanitizeDisplayContent = (content) => {
-    if (!content) return '';
-    return String(content)
-      .replace(/([a-zA-Z&])([¹₹\u20B9])/g, '$1 $2')
-      .replace(/¹\s*(?=\d)/g, '₹')
-      .replace(/¹/g, '₹');
-  };
-
   const loadQuotation = (quotation) => {
     setFormData(quotation.formData);
-    const sanitizedItems = (quotation.subscriptionItems || []).map(item => ({
-      ...item,
-      serialNumber: sanitizeDisplayContent(item.serialNumber || ''),
-      subscription: sanitizeDisplayContent(item.subscription || '')
-    }));
-    setSubscriptionItems(sanitizedItems);
+    setSubscriptionItems(quotation.subscriptionItems);
 
     let updatedQuotationInfo = { ...INITIAL_QUOTATION_INFO, ...(quotation?.quotationInfo || {}) };
     const num = updatedQuotationInfo.number || '';
-    
+
     // Check if it's in the old format (does not contain YYYY/MM/DD)
     // Old format example: "20260630/0"
     const oldFormatMatch = num.match(/^(\d{4})(\d{2})(\d{2})\/(\d+)(.*)$/);
@@ -1450,7 +1653,7 @@ const QuotationForm = () => {
         number: `${year}/${month}/${day}/${refNum}${suffix}`,
         referenceNumber: refNum
       };
-      
+
       // Also update formData if we parsed a revision from the number
       if (isRevised && !quotation.formData?.isRevised) {
         setFormData(prev => ({ ...prev, isRevised: true }));
@@ -1499,7 +1702,7 @@ const QuotationForm = () => {
         date: date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '-'),
         referenceNumber: newRefNum
       });
-      
+
       setCurrentQuotationId(null); // Clear ID so it will save as a new document
       setActiveTab('editor'); // Switch to editor tab
       alert(`Quotation loaded from database and marked as Revision ${nextRevision} (ending in ${String(nextRevision + 1).padStart(2, '0')}).`);
@@ -1530,10 +1733,10 @@ const QuotationForm = () => {
   };
 
   const openTextEditor = (id, field) => {
-    if (!isEditing) return;
     const item = subscriptionItems.find(i => i.id === id);
     if (item) {
-      setEditorContent(sanitizeDisplayContent(item[field] || ''));
+      if (!isEditing) setIsEditing(true);
+      setEditorContent(item[field] || '');
       setShowTextEditor({ id, field });
     }
   };
@@ -1558,13 +1761,15 @@ const QuotationForm = () => {
   };
 
   const renderSubscriptionContent = (item, field) => {
-    const content = item[field];
-    if (!content && isEditing) return <div className="text-gray-500 italic min-h-8 p-1 cursor-pointer">Click to add {field === 'serialNumber' ? 'subscription' : 'description details'}...</div>;
-    if (!content && !isEditing) return <div className="min-h-8 p-1">&nbsp;</div>;
+    const rawContent = item[field];
+    if (!rawContent && isEditing) return <div className="text-gray-500 italic min-h-8 p-1 cursor-pointer">Click to add {field === 'serialNumber' ? 'subscription' : 'description details'}...</div>;
+    if (!rawContent && !isEditing) return <div className="min-h-8 p-1">&nbsp;</div>;
+    const content = formatCurrencyInText(rawContent);
+    const hasTable = content && content.includes('<table');
     return <div
-      dangerouslySetInnerHTML={{ __html: sanitizeDisplayContent(content) }}
-      className="min-h-8 p-1 leading-normal"
-      style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}
+      dangerouslySetInnerHTML={{ __html: content }}
+      className="min-h-8 p-1 leading-relaxed"
+      style={{ whiteSpace: hasTable ? 'normal' : 'pre-wrap', wordBreak: 'break-word' }}
     />;
   };
 
@@ -1577,11 +1782,10 @@ const QuotationForm = () => {
             <div className="flex gap-4">
               <button
                 onClick={() => setActiveTab('saved')}
-                className={`px-3 py-1.5 rounded flex items-center gap-2 text-xs font-semibold transition-colors cursor-pointer ${
-                  activeTab === 'saved'
+                className={`px-3 py-1.5 rounded flex items-center gap-2 text-xs font-semibold transition-colors cursor-pointer ${activeTab === 'saved'
                     ? 'bg-blue-600 text-white shadow-sm'
                     : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
+                  }`}
               >
                 <FolderOpen size={14} />
                 Saved Quotations ({savedQuotations.length})
@@ -1605,11 +1809,10 @@ const QuotationForm = () => {
             <div className="flex items-center gap-4">
               <button
                 onClick={() => setActiveTab('editor')}
-                className={`px-3 py-1.5 rounded flex items-center gap-2 text-xs font-semibold transition-colors cursor-pointer ${
-                  activeTab === 'editor'
+                className={`px-3 py-1.5 rounded flex items-center gap-2 text-xs font-semibold transition-colors cursor-pointer ${activeTab === 'editor'
                     ? 'bg-blue-600 text-white shadow-sm'
                     : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
+                  }`}
               >
                 <FileText size={14} />
                 Form Editor
@@ -1666,21 +1869,21 @@ const QuotationForm = () => {
                         </button>
 
                         {/* Mark Revised (Bottom-Right) */}
-                         <button
-                           onClick={() => {
-                             if (currentQuotationId) {
-                               handleRevisionFromFirebase(currentQuotationId);
-                             } else {
-                               alert("Please save the quotation first!");
-                             }
-                             setIsSpeedDialOpen(false);
-                           }}
-                           title="Mark Revised"
-                           className="absolute w-11 h-11 bg-orange-500 hover:bg-orange-600 text-white rounded-full flex items-center justify-center shadow-md transition-all hover:scale-110 active:scale-95 cursor-pointer"
-                           style={{ bottom: '15px', right: '15px' }}
-                         >
-                           <Edit3 size={18} />
-                         </button>
+                        <button
+                          onClick={() => {
+                            if (currentQuotationId) {
+                              handleRevisionFromFirebase(currentQuotationId);
+                            } else {
+                              alert("Please save the quotation first!");
+                            }
+                            setIsSpeedDialOpen(false);
+                          }}
+                          title="Mark Revised"
+                          className="absolute w-11 h-11 bg-orange-500 hover:bg-orange-600 text-white rounded-full flex items-center justify-center shadow-md transition-all hover:scale-110 active:scale-95 cursor-pointer"
+                          style={{ bottom: '15px', right: '15px' }}
+                        >
+                          <Edit3 size={18} />
+                        </button>
                       </div>
                     )}
                   </div>
@@ -1739,6 +1942,7 @@ const QuotationForm = () => {
           <div className="bg-white shadow-lg rounded-lg overflow-hidden max-w-4xl mx-auto print:shadow-none print:max-w-none">
             {showTextEditor.id && (
               <TinyMCEEditor
+                key={`editor-${showTextEditor.id}-${showTextEditor.field}`}
                 content={editorContent}
                 onClose={closeTextEditor}
                 onSave={(content) => {
@@ -1748,9 +1952,9 @@ const QuotationForm = () => {
               />
             )}
 
-            <div className="p-5 md:p-6 print:p-0">
+            <div className="p-8 print:p-0">
               {/* Header */}
-              <div className="mb-4">
+              <div className="mb-6">
                 <div className="flex justify-between items-center">
                   <div>
                     <div className="flex items-center gap-2">
@@ -1770,12 +1974,12 @@ const QuotationForm = () => {
                       src={companyLogo}
                       alt="Company Logo"
                       className="object-contain"
-                      style={{ width: '270px', height: '85px' }}
+                      style={{ width: '300px', height: '95px' }}
                     />
                   </div>
                 </div>
 
-                <div className="flex justify-between items-center mt-3">
+                <div className="flex justify-between items-center mt-4">
                   <div className="text-sm font-bold">No. {quotationInfo.number}</div>
                   <div className="flex items-center gap-2 text-sm font-bold">
                     <span>Dated</span>
@@ -1791,8 +1995,8 @@ const QuotationForm = () => {
               </div>
 
               {/* Client Info */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-                <div className="space-y-1.5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div className="space-y-3">
                   <FormField
                     label="Business Name"
                     value={formData.clientName}
@@ -1820,12 +2024,12 @@ const QuotationForm = () => {
               </div>
 
               {/* Subscription Table */}
-              <div className="mb-4 custom-header-table-spacing">
-                <div className="flex justify-between items-center mb-2">
+              <div className="mb-6 custom-header-table-spacing">
+                <div className="flex justify-between items-center mb-3">
                   <h3 className="text-base font-bold">SUBSCRIPTION & DESCRIPTION DETAILS</h3>
                   <button
                     onClick={addSubscriptionItem}
-                    className="print:hidden px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 flex items-center gap-1 cursor-pointer"
+                    className="print:hidden px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 flex items-center gap-1"
                   >
                     <Plus size={12} /> Add
                   </button>
@@ -1861,7 +2065,7 @@ const QuotationForm = () => {
                             <button
                               onClick={() => removeSubscriptionItem(item.id)}
                               disabled={subscriptionItems.length === 1}
-                              className="p-1 text-red-500 hover:bg-red-50 rounded disabled:opacity-50 cursor-pointer"
+                              className="p-1 text-red-500 hover:bg-red-50 rounded disabled:opacity-50"
                             >
                               <Trash2 size={12} />
                             </button>
@@ -1874,53 +2078,53 @@ const QuotationForm = () => {
               </div>
 
               {/* Footer Section */}
-              <div className="mt-4">
+              <div className="mt-8">
                 {/* Amount */}
-                <div className="mb-3 border-2 border-black p-3 bg-gray-50">
+                <div className="mb-6 border-2 border-black p-4 bg-gray-50">
                   <div className="flex items-center justify-center gap-6 flex-wrap">
-                    <h3 className="text-xl md:text-2xl font-bold">AMOUNT</h3>
-                    <span className="text-xl md:text-2xl font-bold">{formData.displayCurrency} ({CURRENCY_SYMBOLS[formData.displayCurrency]})</span>
-                    {formData.amount && <span className="text-xl md:text-2xl font-bold">{formatAmountWithCommas(formData.amount)}</span>}
+                    <h3 className="text-2xl font-bold">AMOUNT</h3>
+                    <span className="text-2xl font-bold">{formData.displayCurrency} ({CURRENCY_SYMBOLS[formData.displayCurrency]})</span>
+                    {formData.amount && <span className="text-2xl font-bold">{formatAmountWithCommas(formData.amount)}</span>}
                     {formData.amountCustomText && (
-                      <span className="text-xl md:text-2xl font-bold text-blue-600">- {formData.amountCustomText}</span>
+                      <span className="text-2xl font-bold text-blue-600">- {formData.amountCustomText}</span>
                     )}
                   </div>
                   {formData.amount && (
-                    <div className="text-center text-sm font-semibold mt-1.5">
+                    <div className="text-center text-sm font-semibold mt-2">
                       Amount in words: {numberToWords(formData.amount)}
                     </div>
                   )}
                   <div className="text-center text-sm font-semibold mt-1">(GST EXTRA)</div>
                 </div>
-                <div className="text-center text-sm font-bold text-red-600 mb-3">
+                <div className="text-center text-sm font-bold text-red-600 mb-6">
                   * Cheques should be drawn in favour of BiD
                 </div>
 
                 {/* Payment Details */}
-                <div className="mb-3">
-                  <h3 className="text-base font-bold mb-2">PAYMENT DETAILS</h3>
-                  <div className="grid grid-cols-2 gap-2 mb-2 text-sm">
-                    <div className="mb-1">
-                      <div className="text-xs font-bold text-gray-700">Bank Name</div>
+                <div className="mb-6">
+                  <h3 className="text-lg font-bold mb-3">PAYMENT DETAILS</h3>
+                  <div className="grid grid-cols-2 gap-3 mb-4 text-sm">
+                    <div className="mb-2">
+                      <div className="text-sm font-bold text-gray-700">Bank Name</div>
                       <div className="text-sm font-semibold text-gray-900">{formData.bankName}</div>
                     </div>
-                    <div className="mb-1">
-                      <div className="text-xs font-bold text-gray-700">Account Number</div>
+                    <div className="mb-2">
+                      <div className="text-sm font-bold text-gray-700">Account Number</div>
                       <div className="text-sm font-semibold text-gray-900">{formData.accountNumber}</div>
                     </div>
-                    <div className="mb-1">
-                      <div className="text-xs font-bold text-gray-700">Account Name</div>
+                    <div className="mb-2">
+                      <div className="text-sm font-bold text-gray-700">Account Name</div>
                       <div className="text-sm font-semibold text-gray-900">{formData.accountName}</div>
                     </div>
-                    <div className="mb-1">
-                      <div className="text-xs font-bold text-gray-700">IFSC Code</div>
+                    <div className="mb-2">
+                      <div className="text-sm font-bold text-gray-700">IFSC Code</div>
                       <div className="text-sm font-semibold text-gray-900">{formData.ifscCode}</div>
                     </div>
                   </div>
 
-                  <h3 className="text-base font-bold mb-1.5">DECLARATION</h3>
-                  <div className="space-y-1 text-sm leading-snug font-medium">
-                    <p className="font-semibold text-xs text-gray-800">This is an application for Promotional services to BUILDING INDIA DIGITAL.</p>
+                  <h3 className="text-lg font-bold mb-3">DECLARATION</h3>
+                  <div className="space-y-2 text-sm leading-relaxed font-medium">
+                    <p className="font-semibold">This is an application for Promotional services to BUILDING INDIA DIGITAL.</p>
                     {[
                       "All information including text & picture to be provided by the client who should also be the legal copyright owner.",
                       "BUILDING INDIA DIGITAL shall not be liable for any claims/damages arising out of content posted.",
@@ -1932,7 +2136,7 @@ const QuotationForm = () => {
                       "I allow BUILDING INDIA DIGITAL to make commercial calls to my mobile number(s).",
                       "This declaration holds valid even if numbers registered for NDNC."
                     ].map((term, index) => (
-                      <p key={index} className="flex items-start font-medium text-xs text-gray-700">
+                      <p key={index} className="flex items-start font-medium">
                         <span className="mr-2 font-bold">•</span>
                         <span>{term}</span>
                       </p>
@@ -1941,27 +2145,27 @@ const QuotationForm = () => {
                 </div>
 
                 {/* Signatures */}
-                <div className="grid grid-cols-2 gap-4 mb-4">
+                <div className="grid grid-cols-2 gap-6 mb-6">
                   <div className="text-left">
-                    <h3 className="font-bold text-sm mb-2">CLIENT SIGNATURE</h3>
-                    <div className="h-14 flex items-end justify-start">
-                      <div className="w-full border-t border-gray-300 pt-1">
+                    <h3 className="font-bold text-base mb-3">CLIENT SIGNATURE</h3>
+                    <div className="h-20 flex items-end justify-start">
+                      <div className="w-full border-t border-gray-300 pt-2">
                         <div className="text-xs text-gray-500"></div>
                       </div>
                     </div>
                   </div>
                   <div className="text-left">
-                    <h3 className="font-bold text-sm mb-1 text-gray-800">ORGANISATION SIGNATURE</h3>
+                    <h3 className="font-bold text-base mb-1 text-gray-800">ORGANISATION SIGNATURE</h3>
                     <img
                       src={signatureImage}
                       alt="Organization Signature"
                       style={{
-                        width: '140px',
+                        width: '155px',
                         height: 'auto',
-                        maxHeight: '75px',
+                        maxHeight: '85px',
                         objectFit: 'contain',
                         display: 'block',
-                        marginTop: '2px'
+                        marginTop: '4px'
                       }}
                     />
                   </div>
@@ -1969,7 +2173,7 @@ const QuotationForm = () => {
               </div>
 
               {/* Terms & Conditions */}
-              <div className="border-t pt-3" style={{ pageBreakBefore: 'always' }}>
+              <div className="border-t pt-4" style={{ pageBreakBefore: 'always' }}>
                 <h3 className="text-lg font-bold text-center mb-4">TERMS & CONDITIONS OF SERVICES</h3>
                 <div className="space-y-3 text-sm leading-relaxed font-medium">
                   <div>
@@ -2056,7 +2260,7 @@ const QuotationForm = () => {
                       </div>
                       <span className="text-gray-400 font-bold">{openFolders[group.label] ? '▼' : '▶'}</span>
                     </button>
-                    
+
                     {openFolders[group.label] && (
                       <div className="divide-y divide-gray-100 bg-white">
                         {group.quotations.map(quot => (
