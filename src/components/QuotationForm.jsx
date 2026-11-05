@@ -41,6 +41,7 @@ const INITIAL_FORM_DATA = {
   clientName: '', address: '', contactPerson: '', phone: '',
   amount: '', amountCustomText: '', verticalAlignment: 'top', baseCurrency: 'INR', displayCurrency: 'INR',
   baseAmount: '', isRevised: false, revisionNumber: 0,
+  baseQuotationNumber: '',
   ...BANK_DETAILS
 };
 
@@ -600,9 +601,16 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
 
       {/* No. & Dated Row */}
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: headerRowMargin, marginBottom: headerRowMargin }}>
-        <Text style={{ fontSize: isExtraCompact ? 9.5 : (isCompact ? 10.0 : 10.5), fontFamily: 'Helvetica-Bold' }}>
-          No. {quotationInfo.number}
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <Text style={{ fontSize: isExtraCompact ? 9.5 : (isCompact ? 10.0 : 10.5), fontFamily: 'Helvetica-Bold' }}>
+            No. {quotationInfo.number}
+          </Text>
+          {formData?.isRevised && (
+            <Text style={{ fontSize: isExtraCompact ? 8.0 : 9.0, fontFamily: 'Helvetica-Bold', color: '#D97706', marginLeft: 6 }}>
+              [REVISED - R{formData.revisionNumber || 1}]
+            </Text>
+          )}
+        </View>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           <Text style={{ fontSize: isExtraCompact ? 9.5 : (isCompact ? 10.0 : 10.5), fontFamily: 'Helvetica-Bold', marginRight: 10 }}>Dated</Text>
           <View style={{ borderBottomWidth: 1, borderColor: '#000000', width: isExtraCompact ? 100 : 130, alignItems: 'center' }}>
@@ -1038,6 +1046,34 @@ const FormField = ({ label, value, onChange, type = 'text', rows = 1 }) => (
   </div>
 );
 
+// Helper to sanitize object before saving to Firestore to prevent "Unsupported field value: undefined" errors
+const cleanForFirestore = (obj) => {
+  if (obj === null || obj === undefined) return null;
+  if (Array.isArray(obj)) return obj.map(cleanForFirestore);
+  if (typeof obj === 'object') {
+    const cleaned = {};
+    for (const [key, value] of Object.entries(obj)) {
+      if (value !== undefined) {
+        cleaned[key] = cleanForFirestore(value);
+      }
+    }
+    return cleaned;
+  }
+  return obj;
+};
+
+// Helper to extract reference number from any quotation number string
+const extractRefNumber = (numStr) => {
+  if (!numStr || typeof numStr !== 'string') return null;
+  const matchSlash = numStr.match(/\/(\d{2,6})(?:\/REV|\/Rev|\/R)?$/i);
+  if (matchSlash) return parseInt(matchSlash[1], 10);
+  const matchOld = numStr.match(/^(\d{4})(\d{2})(\d{2})\/(\d+)/);
+  if (matchOld) return parseInt(matchOld[4], 10);
+  const matchDigits = numStr.match(/(\d{3,6})/);
+  if (matchDigits) return parseInt(matchDigits[1], 10);
+  return null;
+};
+
 // Main QuotationForm Component
 const QuotationForm = () => {
   const [subscriptionItems, setSubscriptionItems] = useState([{ id: 1, serialNumber: '', subscription: '' }]);
@@ -1061,7 +1097,7 @@ const QuotationForm = () => {
     sorted.forEach(quot => {
       const date = new Date(quot.savedAt || Date.now());
       const monthYear = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-      const groupKey = `${date.getFullYear()}-${String(date.getMonth()).padStart(2, '0')}`;
+      const groupKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 
       if (!groupsMap[groupKey]) {
         groupsMap[groupKey] = { label: monthYear, quotations: [] };
@@ -1071,6 +1107,13 @@ const QuotationForm = () => {
 
     return Object.keys(groupsMap).sort().reverse().map(key => groupsMap[key]);
   }, [savedQuotations]);
+
+  // Auto-open first folder so saved quotations are immediately visible
+  useEffect(() => {
+    if (groupedQuotations.length > 0 && Object.keys(openFolders).length === 0) {
+      setOpenFolders({ [groupedQuotations[0].label]: true });
+    }
+  }, [groupedQuotations]);
 
   const toggleFolder = (label) => {
     setOpenFolders(prev => ({ ...prev, [label]: !prev[label] }));
@@ -1139,15 +1182,19 @@ const QuotationForm = () => {
   };
 
   useEffect(() => { generateQuotationInfo(); }, []);
-  useEffect(() => { generateQuotationInfo(); }, [formData.isRevised, formData.revisionNumber]);
 
   useEffect(() => {
     const fetchQuotations = async () => {
       try {
         const querySnapshot = await getDocs(collection(db, "quotations"));
         const quots = [];
-        querySnapshot.forEach((doc) => {
-          quots.push(doc.data());
+        querySnapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          quots.push({
+            ...data,
+            id: data.id ? String(data.id) : docSnap.id,
+            docId: docSnap.id
+          });
         });
         setSavedQuotations(quots);
       } catch (error) {
@@ -1156,29 +1203,6 @@ const QuotationForm = () => {
     };
     fetchQuotations();
   }, []);
-
-  const downloadSavedPDF = (pdfBase64, filename) => {
-    try {
-      const binaryString = window.atob(pdfBase64);
-      const len = binaryString.length;
-      const bytes = new Uint8Array(len);
-      for (let i = 0; i < len; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-      const blob = new Blob([bytes], { type: 'application/pdf' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Error downloading saved PDF:', error);
-      alert('Error downloading saved PDF: ' + error.message);
-    }
-  };
 
   const addSubscriptionItem = () => {
     const newId = Math.max(...subscriptionItems.map(item => item.id), 0) + 1;
@@ -1210,42 +1234,37 @@ const QuotationForm = () => {
 
   const saveQuotation = async () => {
     try {
-      // Generate PDF blob
-      const blob = await pdf(<QuotationPDF
-        formData={formData}
-        quotationInfo={quotationInfo}
-        subscriptionItems={subscriptionItems}
-      />).toBlob();
-
-      // Convert blob to base64
-      const reader = new FileReader();
-      const base64Promise = new Promise((resolve, reject) => {
-        reader.onloadend = () => {
-          const base64data = reader.result.split(',')[1];
-          resolve(base64data);
-        };
-        reader.onerror = reject;
-      });
-      reader.readAsDataURL(blob);
-      const pdfBase64 = await base64Promise;
+      const qId = currentQuotationId ? String(currentQuotationId) : String(Date.now());
+      const baseQuotNum = formData.baseQuotationNumber || quotationInfo.number.split('/REV')[0];
 
       const quotationData = {
-        id: currentQuotationId || Date.now(),
-        formData: { ...formData },
-        subscriptionItems: [...subscriptionItems],
+        id: qId,
+        formData: {
+          ...formData,
+          baseQuotationNumber: baseQuotNum
+        },
+        subscriptionItems: subscriptionItems || [],
         quotationInfo: { ...quotationInfo },
         savedAt: new Date().toISOString(),
-        baseQuotationNumber: quotationInfo.number.split('/REV')[0],
-        pdfBase64: pdfBase64
+        baseQuotationNumber: baseQuotNum
       };
 
-      // Save to Firebase Firestore Database
-      const docRef = doc(db, "quotations", quotationData.id.toString());
-      await setDoc(docRef, quotationData);
+      // Clean undefined values for Firestore
+      const cleanData = cleanForFirestore(quotationData);
 
-      setSavedQuotations(prev => currentQuotationId ? prev.map(q => q.id === currentQuotationId ? quotationData : q) : [...prev, quotationData]);
-      setCurrentQuotationId(quotationData.id);
-      alert('Quotation saved successfully to the database!');
+      // Save to Firebase Firestore Database
+      const docRef = doc(db, "quotations", qId);
+      await setDoc(docRef, cleanData);
+
+      setSavedQuotations(prev => {
+        const exists = prev.some(q => String(q.id) === qId || String(q.docId) === qId);
+        if (exists) {
+          return prev.map(q => (String(q.id) === qId || String(q.docId) === qId) ? cleanData : q);
+        }
+        return [cleanData, ...prev];
+      });
+      setCurrentQuotationId(qId);
+      alert(`Quotation saved successfully to the database!${formData.isRevised ? ` (Revision ${formData.revisionNumber || 1})` : ''}`);
     } catch (error) {
       console.error('Error saving to database:', error);
       alert('Error saving quotation: ' + error.message);
@@ -1253,85 +1272,186 @@ const QuotationForm = () => {
   };
 
   const loadQuotation = (quotation) => {
-    setFormData(quotation.formData);
-    setSubscriptionItems(quotation.subscriptionItems);
+    if (!quotation) return;
 
-    let updatedQuotationInfo = { ...INITIAL_QUOTATION_INFO, ...(quotation?.quotationInfo || {}) };
-    const num = updatedQuotationInfo.number || '';
-    
-    // Check if it's in the old format (does not contain YYYY/MM/DD)
-    // Old format example: "20260630/0"
-    const oldFormatMatch = num.match(/^(\d{4})(\d{2})(\d{2})\/(\d+)(.*)$/);
+    const incFormData = quotation.formData || {};
+    const rawNum = quotation.quotationInfo?.number || quotation.number || '';
+    const rawDate = quotation.quotationInfo?.date || quotation.date || '';
+
+    // Check old format (e.g. 20260630/0 or 20260630/4501)
+    let parsedNumber = rawNum;
+    let parsedRef = quotation.quotationInfo?.referenceNumber || extractRefNumber(rawNum);
+    const oldFormatMatch = rawNum.match(/^(\d{4})(\d{2})(\d{2})\/(\d+)(.*)$/);
     if (oldFormatMatch) {
-      const [_, year, month, day, refNumStr, rest] = oldFormatMatch;
+      const [_, year, month, day, refNumStr] = oldFormatMatch;
       let refNum = parseInt(refNumStr, 10);
       if (!refNum || refNum === 0) {
         const randomPrefix = Math.floor(10 + Math.random() * 90);
         refNum = randomPrefix * 100 + 1;
       }
-      const isRevised = quotation.formData?.isRevised || num.includes('/REV') || num.includes('/Rev') || num.includes('/R');
-      const suffix = isRevised ? '/REV' : '';
-      updatedQuotationInfo = {
-        ...updatedQuotationInfo,
-        number: `${year}/${month}/${day}/${refNum}${suffix}`,
-        referenceNumber: refNum
-      };
-      
-      // Also update formData if we parsed a revision from the number
-      if (isRevised && !quotation.formData?.isRevised) {
-        setFormData(prev => ({ ...prev, isRevised: true }));
-      }
+      parsedRef = refNum;
+      const isRev = incFormData.isRevised || rawNum.includes('/REV') || rawNum.includes('/Rev') || rawNum.includes('/R');
+      parsedNumber = `${year}/${month}/${day}/${refNum}${isRev ? '/REV' : ''}`;
     }
 
+    const isRevised = Boolean(
+      incFormData.isRevised ||
+      quotation.isRevised ||
+      parsedNumber.includes('/REV') ||
+      parsedNumber.includes('/Rev') ||
+      parsedNumber.includes('/R')
+    );
+
+    let revNum = incFormData.revisionNumber ?? quotation.revisionNumber ?? 0;
+    if (isRevised && (!revNum || revNum === 0)) {
+      if (parsedRef) {
+        const ending = parsedRef % 100;
+        if (ending > 1) revNum = ending - 1;
+      }
+      if (!revNum) revNum = 1;
+    }
+
+    const mergedFormData = {
+      ...INITIAL_FORM_DATA,
+      ...incFormData,
+      clientName: incFormData.clientName || quotation.clientName || '',
+      address: incFormData.address || quotation.address || '',
+      contactPerson: incFormData.contactPerson || quotation.contactPerson || '',
+      phone: incFormData.phone || quotation.phone || '',
+      amount: incFormData.amount || quotation.amount || '',
+      quotationName: incFormData.quotationName || quotation.quotationName || '',
+      isRevised,
+      revisionNumber: revNum,
+      baseQuotationNumber: quotation.baseQuotationNumber || incFormData.baseQuotationNumber || parsedNumber.split('/REV')[0]
+    };
+
+    const incomingItems = quotation.subscriptionItems || quotation.items;
+    const items = Array.isArray(incomingItems) && incomingItems.length > 0
+      ? incomingItems
+      : [{ id: 1, serialNumber: '', subscription: '' }];
+
+    const updatedQuotationInfo = {
+      ...INITIAL_QUOTATION_INFO,
+      ...(quotation.quotationInfo || {}),
+      number: parsedNumber,
+      date: rawDate || quotation.quotationInfo?.date || '',
+      referenceNumber: parsedRef || quotation.quotationInfo?.referenceNumber || 0
+    };
+
+    setFormData(mergedFormData);
+    setSubscriptionItems(items);
     setQuotationInfo(updatedQuotationInfo);
-    setCurrentQuotationId(quotation.id);
+    setCurrentQuotationId(quotation.id ? String(quotation.id) : (quotation.docId ? String(quotation.docId) : null));
     setShowSavedQuotations(false);
+    setActiveTab('editor');
   };
 
-  const handleRevisionFromFirebase = async (quotationId) => {
+  const handleRevision = async (targetQuotationOrId = null) => {
     try {
-      const docRef = doc(db, "quotations", quotationId.toString());
-      const docSnap = await getDoc(docRef);
-      if (!docSnap.exists()) {
-        return alert('Quotation not found in database!');
+      let target = null;
+
+      if (targetQuotationOrId && typeof targetQuotationOrId === 'object') {
+        target = targetQuotationOrId;
+      } else if (targetQuotationOrId) {
+        const found = savedQuotations.find(q => String(q.id) === String(targetQuotationOrId) || String(q.docId) === String(targetQuotationOrId));
+        if (found) {
+          target = found;
+        } else {
+          const docRef = doc(db, "quotations", targetQuotationOrId.toString());
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            target = { ...docSnap.data(), id: docSnap.id, docId: docSnap.id };
+          }
+        }
       }
-      const quotation = docSnap.data();
 
-      // Identify the base quotation and calculate the next revision number
-      const baseNumber = quotation.baseQuotationNumber;
-      const relatedQuotations = savedQuotations.filter(q => q.baseQuotationNumber === baseNumber);
-      const nextRevision = Math.max(0, ...relatedQuotations.map(q => q.formData?.revisionNumber || 0)) + 1;
+      // If no target specified (e.g. clicked from Editor), use current editor form data
+      if (!target) {
+        target = {
+          id: currentQuotationId,
+          formData: { ...formData },
+          subscriptionItems: [...subscriptionItems],
+          quotationInfo: { ...quotationInfo },
+          baseQuotationNumber: formData.baseQuotationNumber || quotationInfo.number.split('/REV')[0]
+        };
+      }
 
-      // Keep the first two digits of referenceNumber, and set the last two digits to (nextRevision + 1)
-      const originalRef = quotation.quotationInfo?.referenceNumber || 1001;
-      const basePrefix = Math.floor(originalRef / 100) || Math.floor(10 + Math.random() * 90);
+      const targetFormData = target.formData || {};
+      const targetQuotInfo = target.quotationInfo || {};
+      const targetNum = targetQuotInfo.number || target.number || quotationInfo.number || '';
+
+      // Determine original reference number and base prefix (e.g. 4501 -> prefix 45)
+      let refNum = targetQuotInfo.referenceNumber || extractRefNumber(targetNum);
+      if (!refNum || refNum === 0) {
+        const randomPrefix = Math.floor(10 + Math.random() * 90);
+        refNum = randomPrefix * 100 + 1;
+      }
+      const basePrefix = Math.floor(refNum / 100);
+
+      // Determine root base quotation number
+      const baseQuotationNumber = target.baseQuotationNumber || targetFormData.baseQuotationNumber || targetNum.split('/REV')[0];
+
+      // Find all related quotations in saved list
+      const relatedQuotations = savedQuotations.filter(q => {
+        if (!q) return false;
+        if (baseQuotationNumber && (q.baseQuotationNumber === baseQuotationNumber || q.formData?.baseQuotationNumber === baseQuotationNumber)) {
+          return true;
+        }
+        const qRef = q.quotationInfo?.referenceNumber || extractRefNumber(q.quotationInfo?.number || q.number);
+        if (qRef && Math.floor(qRef / 100) === basePrefix) {
+          return true;
+        }
+        return false;
+      });
+
+      // Calculate next revision number
+      const maxExistingRevision = relatedQuotations.reduce((max, q) => {
+        const r = q.formData?.revisionNumber ?? q.revisionNumber;
+        return typeof r === 'number' ? Math.max(max, r) : max;
+      }, 0);
+
+      const currentRev = targetFormData.revisionNumber ?? (targetNum.includes('/REV') ? 1 : 0);
+      const nextRevision = Math.max(maxExistingRevision, currentRev) + 1;
+
+      // Keep base prefix, last two digits = (nextRevision + 1), e.g. prefix 45, rev 1 -> 4502
       const newRefNum = basePrefix * 100 + (nextRevision + 1);
 
-      // Generate new adapted number and date
+      // Generate date for revision
       const date = new Date();
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, '0');
       const day = String(date.getDate()).padStart(2, '0');
+      const dateFormatted = date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '-');
       const newNumber = `${year}/${month}/${day}/${newRefNum}/REV`;
 
       setFormData({
-        ...quotation.formData,
+        ...INITIAL_FORM_DATA,
+        ...targetFormData,
         isRevised: true,
-        revisionNumber: nextRevision
+        revisionNumber: nextRevision,
+        baseQuotationNumber: baseQuotationNumber
       });
-      setSubscriptionItems(quotation.subscriptionItems);
+
+      const incomingItems = target.subscriptionItems || target.items;
+      setSubscriptionItems(
+        Array.isArray(incomingItems) && incomingItems.length > 0
+          ? incomingItems
+          : [{ id: 1, serialNumber: '', subscription: '' }]
+      );
+
       setQuotationInfo({
         number: newNumber,
-        date: date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '-'),
+        date: dateFormatted,
         referenceNumber: newRefNum
       });
-      
-      setCurrentQuotationId(null); // Clear ID so it will save as a new document
-      setActiveTab('editor'); // Switch to editor tab
-      alert(`Quotation loaded from database and marked as Revision ${nextRevision} (ending in ${String(nextRevision + 1).padStart(2, '0')}).`);
+
+      setCurrentQuotationId(null); // Save as new revision document
+      setActiveTab('editor');
+
+      alert(`Quotation loaded and marked as Revision ${nextRevision} (${newNumber}). Click Save to store in database.`);
     } catch (error) {
-      console.error('Error fetching for revision:', error);
-      alert('Error fetching quotation for revision: ' + error.message);
+      console.error('Error handling revision:', error);
+      alert('Error handling revision: ' + error.message);
     }
   };
 
@@ -1369,12 +1489,13 @@ const QuotationForm = () => {
   };
 
   const deleteQuotation = async (id) => {
+    if (!id) return;
     if (window.confirm('Are you sure you want to delete this quotation?')) {
       try {
         const docRef = doc(db, "quotations", id.toString());
         await deleteDoc(docRef);
-        setSavedQuotations(prev => prev.filter(q => q.id !== id));
-        if (currentQuotationId === id) setCurrentQuotationId(null);
+        setSavedQuotations(prev => prev.filter(q => String(q.id) !== String(id) && String(q.docId) !== String(id)));
+        if (String(currentQuotationId) === String(id)) setCurrentQuotationId(null);
         alert('Quotation deleted successfully from the database!');
       } catch (error) {
         console.error('Error deleting from database:', error);
@@ -1492,21 +1613,17 @@ const QuotationForm = () => {
                         </button>
 
                         {/* Mark Revised (Bottom-Right) */}
-                         <button
-                           onClick={() => {
-                             if (currentQuotationId) {
-                               handleRevisionFromFirebase(currentQuotationId);
-                             } else {
-                               alert("Please save the quotation first!");
-                             }
-                             setIsSpeedDialOpen(false);
-                           }}
-                           title="Mark Revised"
-                           className="absolute w-11 h-11 bg-orange-500 hover:bg-orange-600 text-white rounded-full flex items-center justify-center shadow-md transition-all hover:scale-110 active:scale-95 cursor-pointer"
-                           style={{ bottom: '15px', right: '15px' }}
-                         >
-                           <Edit3 size={18} />
-                         </button>
+                        <button
+                          onClick={() => {
+                            handleRevision();
+                            setIsSpeedDialOpen(false);
+                          }}
+                          title="Mark Revised"
+                          className="absolute w-11 h-11 bg-orange-500 hover:bg-orange-600 text-white rounded-full flex items-center justify-center shadow-md transition-all hover:scale-110 active:scale-95 cursor-pointer"
+                          style={{ bottom: '15px', right: '15px' }}
+                        >
+                          <Edit3 size={18} />
+                        </button>
                       </div>
                     )}
                   </div>
@@ -1551,9 +1668,14 @@ const QuotationForm = () => {
                   <option value="bottom">Bottom</option>
                 </select>
               </div>
-              {currentQuotationId && (
-                <button onClick={() => handleRevisionFromFirebase(currentQuotationId)} className="flex items-center gap-1 text-xs text-orange-700 hover:text-orange-955 border border-orange-300 px-3 py-1.5 rounded bg-orange-50 hover:bg-orange-100 cursor-pointer font-semibold"><Edit3 size={14} /> Mark as Revised</button>
-              )}
+              <button
+                onClick={() => handleRevision()}
+                className="flex items-center gap-1.5 text-xs text-orange-700 hover:text-orange-900 border border-orange-300 px-3 py-1.5 rounded-md bg-orange-50 hover:bg-orange-100 transition-colors cursor-pointer font-semibold shadow-sm"
+                title="Create a new revision of this quotation"
+              >
+                <Edit3 size={14} />
+                {formData.isRevised ? `Revise Again (Currently R${formData.revisionNumber || 1})` : 'Mark as Revised'}
+              </button>
             </div>
           </div>
         )}
@@ -1602,7 +1724,14 @@ const QuotationForm = () => {
                 </div>
 
                 <div className="flex justify-between items-center mt-4">
-                  <div className="text-sm font-bold">No. {quotationInfo.number}</div>
+                  <div className="flex items-center gap-2">
+                    <div className="text-sm font-bold">No. {quotationInfo.number}</div>
+                    {formData.isRevised && (
+                      <span className="bg-orange-500 text-white text-xs px-2 py-0.5 rounded font-semibold tracking-wide">
+                        REVISED (R{formData.revisionNumber || 1})
+                      </span>
+                    )}
+                  </div>
                   <div className="flex items-center gap-2 text-sm font-bold">
                     <span>Dated</span>
                     <input
@@ -1885,38 +2014,61 @@ const QuotationForm = () => {
                     
                     {openFolders[group.label] && (
                       <div className="divide-y divide-gray-100 bg-white">
-                        {group.quotations.map(quot => (
-                          <div key={quot.id} className="p-4 flex items-center justify-between hover:bg-gray-50">
-                            <div>
-                              <div className="font-medium flex items-center gap-2 text-gray-900">
-                                {quot.quotationInfo?.number || quot.number || 'No Quotation Number'}
-                                {quot.formData?.isRevised && (
-                                  <span className="bg-orange-500 text-white text-xs px-1.5 py-0.5 rounded">R{quot.formData.revisionNumber}</span>
-                                )}
+                        {group.quotations.map(quot => {
+                          const quotNum = quot.quotationInfo?.number || quot.number || 'No Quotation Number';
+                          const isRev = Boolean(
+                            quot.formData?.isRevised ||
+                            quot.isRevised ||
+                            quotNum.includes('/REV') ||
+                            quotNum.includes('/Rev') ||
+                            quotNum.includes('/R')
+                          );
+                          let revNum = quot.formData?.revisionNumber ?? quot.revisionNumber;
+                          if (isRev && (!revNum || revNum === 0)) {
+                            const ref = quot.quotationInfo?.referenceNumber || extractRefNumber(quotNum);
+                            if (ref && (ref % 100) > 1) {
+                              revNum = (ref % 100) - 1;
+                            }
+                          }
+
+                          return (
+                            <div key={quot.id || quot.docId} className="p-4 flex items-center justify-between hover:bg-gray-50">
+                              <div>
+                                <div className="font-medium flex items-center gap-2 text-gray-900">
+                                  <span>{quotNum}</span>
+                                  {isRev && (
+                                    <span className="bg-orange-500 text-white text-xs px-2 py-0.5 rounded font-semibold tracking-wide">
+                                      {revNum && revNum > 0 ? `REV R${revNum}` : 'REVISED'}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-sm text-gray-600 mt-1 font-medium">
+                                  {quot.formData?.quotationName ? `${quot.formData.quotationName} (${quot.formData.clientName || 'No Client Name'})` : (quot.formData?.clientName || 'No Client Name')}
+                                </div>
+                                <div className="text-xs text-gray-400 mt-1">Saved on: {new Date(quot.savedAt || Date.now()).toLocaleString()}</div>
                               </div>
-                              <div className="text-sm text-gray-600 mt-1 font-medium">
-                                {quot.formData?.quotationName ? `${quot.formData.quotationName} (${quot.formData.clientName || 'No Client Name'})` : (quot.formData?.clientName || 'No Client Name')}
-                              </div>
-                              <div className="text-xs text-gray-400 mt-1">Saved on: {new Date(quot.savedAt || Date.now()).toLocaleString()}</div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <button onClick={() => { loadQuotation(quot); setActiveTab('editor'); }} className="px-4 py-1.5 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-600 transition-colors font-medium font-semibold">Load</button>
-                              <button onClick={() => handleRevisionFromFirebase(quot.id)} className="px-4 py-1.5 bg-orange-500 text-white text-sm rounded-md hover:bg-orange-600 transition-colors font-medium font-semibold">Revised</button>
-                              {quot.formData && (
+                              <div className="flex items-center gap-2">
+                                <button onClick={() => loadQuotation(quot)} className="px-4 py-1.5 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-600 transition-colors font-semibold">Load</button>
+                                <button onClick={() => handleRevision(quot)} className="px-4 py-1.5 bg-orange-500 text-white text-sm rounded-md hover:bg-orange-600 transition-colors font-semibold">Revised</button>
                                 <button
                                   onClick={async () => {
                                     try {
+                                      const mergedData = { ...INITIAL_FORM_DATA, ...(quot.formData || {}) };
+                                      const mergedInfo = quot.quotationInfo || { number: quotNum, date: quot.date || '' };
+                                      const mergedItems = Array.isArray(quot.subscriptionItems) && quot.subscriptionItems.length > 0
+                                        ? quot.subscriptionItems
+                                        : (Array.isArray(quot.items) ? quot.items : [{ id: 1, serialNumber: '', subscription: '' }]);
+
                                       const blob = await pdf(<QuotationPDF
-                                        formData={quot.formData}
-                                        quotationInfo={quot.quotationInfo || INITIAL_QUOTATION_INFO}
-                                        subscriptionItems={quot.subscriptionItems || []}
+                                        formData={mergedData}
+                                        quotationInfo={mergedInfo}
+                                        subscriptionItems={mergedItems}
                                       />).toBlob();
                                       const url = URL.createObjectURL(blob);
                                       const link = document.createElement('a');
                                       link.href = url;
-                                      const quotNum = quot.quotationInfo?.number || 'quotation';
-                                      const filename = quot.formData.quotationName
-                                        ? `${quot.formData.quotationName}.pdf`
+                                      const filename = mergedData.quotationName
+                                        ? `${mergedData.quotationName}.pdf`
                                         : `quotation-${quotNum.replace(/\//g, '-')}.pdf`;
                                       link.download = filename;
                                       document.body.appendChild(link);
@@ -1928,15 +2080,15 @@ const QuotationForm = () => {
                                       alert('Error generating PDF: ' + error.message);
                                     }
                                   }}
-                                  className="px-4 py-1.5 bg-green-500 text-white text-sm rounded-md hover:bg-green-600 transition-colors font-medium font-semibold"
+                                  className="px-4 py-1.5 bg-green-500 text-white text-sm rounded-md hover:bg-green-600 transition-colors font-semibold"
                                 >
                                   Download PDF
                                 </button>
-                              )}
-                              <button onClick={() => deleteQuotation(quot.id)} className="px-4 py-1.5 bg-white text-red-500 text-sm rounded-md hover:bg-red-50 border border-red-200 transition-colors font-medium">Delete</button>
+                                <button onClick={() => deleteQuotation(quot.id || quot.docId)} className="px-4 py-1.5 bg-white text-red-500 text-sm rounded-md hover:bg-red-50 border border-red-200 transition-colors font-medium">Delete</button>
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>
