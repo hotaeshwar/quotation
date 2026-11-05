@@ -895,7 +895,7 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
         </View>
 
         {/* Dynamic Financial & Sign-off Section (Amount, Payment Details, Declaration, Signatures) */}
-        <View style={{ marginTop: spacingMargin }} wrap={false} break={isTableFullPage}>
+        <View style={{ marginTop: spacingMargin }} wrap={false}>
           {/* Group 1: Amount Section & Cheques Note */}
           <View>
             <View style={[styles.amountSection, { padding: amountSectionPadding, marginTop: 2, marginBottom: 2 }]}>
