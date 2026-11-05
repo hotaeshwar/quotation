@@ -53,8 +53,8 @@ const styles = StyleSheet.create({
   page: {
     flexDirection: 'column',
     backgroundColor: '#FFFFFF',
-    paddingTop: 10,
-    paddingBottom: 10,
+    paddingTop: 14,
+    paddingBottom: 14,
     paddingHorizontal: 12,
     fontFamily: 'Helvetica',
   },
@@ -394,10 +394,10 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
     return '';
   };
 
-  const blockMargin = isCompact ? 1.0 : 2.5;
-  const listMargin = isCompact ? 1.0 : 2.5;
-  const listItemMargin = isCompact ? 0.6 : 2.0;
-  const fallbackMargin = isCompact ? 0.8 : 2.0;
+  const blockMargin = isCompact ? 1.5 : 2.5;
+  const listMargin = isCompact ? 1.5 : 2.5;
+  const listItemMargin = isCompact ? 1.0 : 2.0;
+  const fallbackMargin = isCompact ? 1.2 : 2.0;
 
   const BLOCK_TAGS = ['p', 'div', 'ul', 'ol', 'table', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'section', 'article', 'header', 'footer'];
 
@@ -435,13 +435,13 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
       return `${(100 / totalCols).toFixed(1)}%`;
     };
 
-    const tableFontSize = isCompact ? 8.0 : 9.0;
+    const tableFontSize = isCompact ? 8.8 : 9.0;
 
     return (
       <View key={`tbl-${keyIndex}`} style={{
         width: '100%',
-        marginTop: isCompact ? 1.5 : 3,
-        marginBottom: isCompact ? 2 : 4,
+        marginTop: isCompact ? 2 : 3,
+        marginBottom: isCompact ? 3 : 4,
         borderTopWidth: 1,
         borderTopColor: '#000000',
         borderLeftWidth: 1,
@@ -464,7 +464,7 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
               backgroundColor: rowBg,
               borderBottomWidth: isLastRow ? 0 : 1,
               borderBottomColor: '#000000',
-              minHeight: isCompact ? 14 : 18,
+              minHeight: isCompact ? 16 : 18,
               alignItems: 'center',
             }}>
               {row.cells.map((cell, cIdx) => {
@@ -492,8 +492,8 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
                 return (
                   <View key={`td-${keyIndex}-${rIdx}-${cIdx}`} style={{
                     width: colWidth,
-                    paddingVertical: isCompact ? 1.2 : 2.5,
-                    paddingHorizontal: isCompact ? 3.5 : 5,
+                    paddingVertical: isCompact ? 1.8 : 2.5,
+                    paddingHorizontal: isCompact ? 4.0 : 5,
                     borderRightWidth: isLastCol ? 0 : 1,
                     borderRightColor: '#000000',
                     justifyContent: 'center',
@@ -680,42 +680,45 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
     return acc + getVisibleTextLength(item.serialNumber) + getVisibleTextLength(item.subscription);
   }, 0);
 
-  // Dynamic layout settings - comfortable, readable, natural pagination across pages
-  const isCompact = totalTextLength > 600 || subscriptionItems.length > 2;
+  // Dynamic layout settings:
+  // When table content is detailed (lists, breakdown table, multiple rows, or text > 300),
+  // the table acquires full space on Page 1, and the amount/payment/declaration/signature
+  // block dynamically breaks to Page 2 so nothing gets squeezed.
+  const isTableFullPage = totalTextLength > 300 || subscriptionItems.length > 2 || subscriptionItems.some(i => (i.subscription || '').includes('<li') || (i.subscription || '').includes('<table'));
 
-  const logoWidth = isCompact ? 190 : 240;
-  const logoHeight = isCompact ? 46 : 68;
-  const headerBottomMargin = isCompact ? 2 : 8;
-  const headerRowMargin = isCompact ? 1 : 4;
-  const clientInfoMarginBottom = isCompact ? 2 : 5;
-  const clientInfoRowMarginBottom = isCompact ? 1.0 : 2.5;
-  const tableHeaderMarginTop = isCompact ? 3 : 8;
-  const tableMarginBottom = isCompact ? 3 : 8;
-  const tableHeaderMinHeight = isCompact ? 18 : 24;
-  const tableCellPadding = isCompact ? 2.5 : 4.5;
-  const tableFontSize = isCompact ? 8.5 : 9.5;
-  const amountFontSize = isCompact ? 11 : 13.5;
-  const noteFontSize = isCompact ? 9.5 : 12;
-  const wordAmountFontSize = isCompact ? 8.5 : 10.5;
-  const amountSectionPadding = isCompact ? 2 : 4;
-  const spacingMargin = isCompact ? 2 : 8;
-  const sectionHeaderFont = isCompact ? 9.5 : 12.5;
-  const sectionHeaderMarginBottom = isCompact ? 2 : 4;
-  const paymentLabelFont = isCompact ? 8.5 : 10.0;
-  const paymentValFont = isCompact ? 8.5 : 10.0;
-  const paymentMarginBottom = isCompact ? 1.5 : 3.5;
-  const declarationTextFont = isCompact ? 7.8 : 9.5;
-  const declarationItemFont = isCompact ? 7.2 : 9.0;
-  const declarationItemLineHeight = isCompact ? 1.15 : 1.25;
-  const signatureSectionMarginTop = isCompact ? 4 : 16;
-  const signatureImageWidth = isCompact ? 95 : 125;
-  const signatureImageHeight = isCompact ? 36 : 56;
-  const signatureLabelFont = isCompact ? 9.0 : 11.0;
+  const logoWidth = 220;
+  const logoHeight = 60;
+  const headerBottomMargin = 6;
+  const headerRowMargin = 2;
+  const clientInfoMarginBottom = 4;
+  const clientInfoRowMarginBottom = 1.5;
+  const tableHeaderMarginTop = 6;
+  const tableMarginBottom = 6;
+  const tableHeaderMinHeight = 22;
+  const tableCellPadding = 4.0;
+  const tableFontSize = 9.2;
+  const amountFontSize = 13.0;
+  const noteFontSize = 11.5;
+  const wordAmountFontSize = 10.0;
+  const amountSectionPadding = 4.5;
+  const spacingMargin = 6;
+  const sectionHeaderFont = 12.0;
+  const sectionHeaderMarginBottom = 3;
+  const paymentLabelFont = 9.5;
+  const paymentValFont = 9.5;
+  const paymentMarginBottom = 3.0;
+  const declarationTextFont = 9.0;
+  const declarationItemFont = 8.2;
+  const declarationItemLineHeight = 1.25;
+  const signatureSectionMarginTop = 14;
+  const signatureImageWidth = 115;
+  const signatureImageHeight = 50;
+  const signatureLabelFont = 10.5;
 
   const cellStyle = {
     ...styles.tableCell,
     fontSize: tableFontSize,
-    lineHeight: isCompact ? 1.20 : 1.28,
+    lineHeight: 1.28,
     marginTop: 0,
     marginBottom: 0,
     padding: 0
@@ -821,7 +824,7 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
         </View>
 
         {/* Unified Subscription Table (Word Layout Rules) */}
-        <View style={[styles.table, { marginTop: tableHeaderMarginTop, marginBottom: tableMarginBottom }]}>
+        <View style={[styles.table, { marginTop: tableHeaderMarginTop, marginBottom: tableMarginBottom }, isTableFullPage && { flex: 1, minHeight: 560 }]}>
           {/* Table Header */}
           <View style={[styles.tableHeaderRow, { minHeight: tableHeaderMinHeight }]}>
             <View style={styles.tableHeaderColLeft}>
@@ -842,7 +845,8 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
                   flexDirection: 'row',
                   alignItems: 'stretch',
                   marginTop: -2,
-                }
+                },
+                isTableFullPage && index === subscriptionItems.length - 1 && { flexGrow: 1 }
               ]}
             >
               {/* Left column label — fixed 20% width */}
@@ -864,7 +868,7 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
                   html={item.serialNumber}
                   customStyle={{ ...cellStyle, fontFamily: 'Helvetica-Bold', textAlign: 'center' }}
                   verticalAlignment={formData.verticalAlignment}
-                  isCompact={isCompact}
+                  isCompact={false}
                 />
               </View>
               {/* Right column content — 80% width */}
@@ -882,17 +886,18 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
                   html={item.subscription}
                   customStyle={{ ...cellStyle, fontFamily: 'Helvetica' }}
                   verticalAlignment={formData.verticalAlignment}
-                  isCompact={isCompact}
+                  isCompact={false}
                 />
               </View>
             </View>
           ))}
         </View>
 
-        <View style={{ marginTop: isCompact ? 2 : 6 }}>
+        {/* Dynamic Financial & Sign-off Section (Amount, Payment Details, Declaration, Signatures) */}
+        <View style={{ marginTop: spacingMargin }} wrap={false} break={isTableFullPage}>
           {/* Group 1: Amount Section & Cheques Note */}
-          <View wrap={false}>
-            <View style={[styles.amountSection, { padding: amountSectionPadding, marginTop: isCompact ? 0 : 2, marginBottom: isCompact ? 0 : 2 }]}>
+          <View>
+            <View style={[styles.amountSection, { padding: amountSectionPadding, marginTop: 2, marginBottom: 2 }]}>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, flexWrap: 'wrap' }}>
                 <Text style={[styles.amountText, { fontSize: amountFontSize }]}>AMOUNT</Text>
                 <Text style={[styles.amountText, { fontSize: amountFontSize }]}>
@@ -910,21 +915,21 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
                 ) : <Text style={styles.amountText}>{""}</Text>}
               </View>
               {formData.amount ? (
-                <Text style={[styles.text, { textAlign: 'center', marginTop: isCompact ? 1 : 4, fontFamily: 'Helvetica-Bold', fontSize: wordAmountFontSize }]}>
+                <Text style={[styles.text, { textAlign: 'center', marginTop: 3, fontFamily: 'Helvetica-Bold', fontSize: wordAmountFontSize }]}>
                   Amount in words: {numberToWords(formData.amount)}
                 </Text>
               ) : <Text style={styles.text}>{""}</Text>}
-              <Text style={[styles.text, { textAlign: 'center', marginTop: isCompact ? 1 : 4, fontFamily: 'Helvetica-Bold', marginBottom: isCompact ? 1 : 2, fontSize: wordAmountFontSize }]}>
+              <Text style={[styles.text, { textAlign: 'center', marginTop: 2, fontFamily: 'Helvetica-Bold', marginBottom: 2, fontSize: wordAmountFontSize }]}>
                 (GST EXTRA)
               </Text>
             </View>
-            <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: wordAmountFontSize, textAlign: 'center', marginTop: isCompact ? 2 : 5, color: '#FF0000', marginBottom: isCompact ? 2 : 5 }}>
+            <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: wordAmountFontSize, textAlign: 'center', marginTop: 3, color: '#FF0000', marginBottom: 3 }}>
               * Cheques should be drawn in favour of BiD
             </Text>
           </View>
 
           {/* Group 2: Payment Details */}
-          <View style={{ marginBottom: spacingMargin, marginTop: spacingMargin }} wrap={false}>
+          <View style={{ marginBottom: spacingMargin, marginTop: spacingMargin }}>
             <Text style={[styles.sectionHeader, { fontSize: sectionHeaderFont, marginTop: 0, marginBottom: sectionHeaderMarginBottom }]}>PAYMENT DETAILS</Text>
             <View style={styles.paymentGrid}>
               <View style={[styles.paymentItem, { marginBottom: paymentMarginBottom }]}>
@@ -947,10 +952,10 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
           </View>
 
           {/* Group 3: Declaration & Signatures Grouped Together */}
-          <View wrap={false} style={{ marginTop: spacingMargin }}>
+          <View style={{ marginTop: spacingMargin }}>
             <View style={{ marginBottom: spacingMargin }}>
               <Text style={[styles.sectionHeader, { fontSize: sectionHeaderFont, marginTop: 0, marginBottom: sectionHeaderMarginBottom }]}>DECLARATION</Text>
-              <Text style={[styles.declarationText, { fontSize: declarationTextFont, marginBottom: isCompact ? 2 : 4 }]}>
+              <Text style={[styles.declarationText, { fontSize: declarationTextFont, marginBottom: 3 }]}>
                 This is an application for Promotional services to BUILDING INDIA DIGITAL.
               </Text>
               {[
@@ -964,11 +969,11 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
                 "I allow BUILDING INDIA DIGITAL to make commercial calls to my mobile number(s).",
                 "This declaration holds valid even if numbers registered for NDNC."
               ].map((item, index) => (
-                <Text key={index} style={[styles.declarationItem, { fontSize: declarationItemFont, lineHeight: declarationItemLineHeight, marginBottom: isCompact ? 0.8 : 2.0 }]}>• {item}</Text>
+                <Text key={index} style={[styles.declarationItem, { fontSize: declarationItemFont, lineHeight: declarationItemLineHeight, marginBottom: 1.5 }]}>• {item}</Text>
               ))}
             </View>
 
-            <View style={[styles.signatureSection, { marginTop: signatureSectionMarginTop, minHeight: isCompact ? 35 : 45 }]}>
+            <View style={[styles.signatureSection, { marginTop: signatureSectionMarginTop, minHeight: 40 }]}>
               <View style={styles.signatureBox}>
                 <Text style={[styles.signatureLabel, { fontSize: signatureLabelFont }]}>CLIENT SIGNATURE</Text>
                 <View style={{ height: 20, justifyContent: 'flex-end', alignItems: 'flex-start', marginTop: 0 }}>
@@ -977,7 +982,7 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
               </View>
               <View style={styles.signatureBox}>
                 <Text style={[styles.signatureLabel, { fontSize: signatureLabelFont }]}>ORGANISATION SIGNATURE</Text>
-                <View style={{ marginTop: isCompact ? 0 : 2, alignItems: 'flex-start' }}>
+                <View style={{ marginTop: 2, alignItems: 'flex-start' }}>
                   <Image src={signatureImage} style={[styles.signatureImage, { width: signatureImageWidth, height: signatureImageHeight }]} />
                 </View>
               </View>
