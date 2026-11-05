@@ -394,10 +394,10 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
     return '';
   };
 
-  const blockMargin = isCompact ? 1.5 : 2.5;
-  const listMargin = isCompact ? 1.5 : 2.5;
-  const listItemMargin = isCompact ? 1.0 : 2.0;
-  const fallbackMargin = isCompact ? 1.2 : 2.0;
+  const blockMargin = isCompact ? 0.8 : 2.0;
+  const listMargin = isCompact ? 0.8 : 2.0;
+  const listItemMargin = isCompact ? 0.4 : 1.5;
+  const fallbackMargin = isCompact ? 0.8 : 1.5;
 
   const BLOCK_TAGS = ['p', 'div', 'ul', 'ol', 'table', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'section', 'article', 'header', 'footer'];
 
@@ -435,13 +435,13 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
       return `${(100 / totalCols).toFixed(1)}%`;
     };
 
-    const tableFontSize = isCompact ? 8.8 : 9.0;
+    const tableFontSize = isCompact ? 7.8 : 9.0;
 
     return (
       <View key={`tbl-${keyIndex}`} style={{
         width: '100%',
-        marginTop: isCompact ? 2 : 3,
-        marginBottom: isCompact ? 3 : 4,
+        marginTop: isCompact ? 1.5 : 3,
+        marginBottom: isCompact ? 2.5 : 4,
         borderTopWidth: 1,
         borderTopColor: '#000000',
         borderLeftWidth: 1,
@@ -464,7 +464,7 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
               backgroundColor: rowBg,
               borderBottomWidth: isLastRow ? 0 : 1,
               borderBottomColor: '#000000',
-              minHeight: isCompact ? 16 : 18,
+              minHeight: isCompact ? 14 : 18,
               alignItems: 'center',
             }}>
               {row.cells.map((cell, cIdx) => {
@@ -492,8 +492,8 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
                 return (
                   <View key={`td-${keyIndex}-${rIdx}-${cIdx}`} style={{
                     width: colWidth,
-                    paddingVertical: isCompact ? 1.8 : 2.5,
-                    paddingHorizontal: isCompact ? 4.0 : 5,
+                    paddingVertical: isCompact ? 1.2 : 2.5,
+                    paddingHorizontal: isCompact ? 3.5 : 5,
                     borderRightWidth: isLastCol ? 0 : 1,
                     borderRightColor: '#000000',
                     justifyContent: 'center',
@@ -685,40 +685,41 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
   // the table acquires full space on Page 1, and the amount/payment/declaration/signature
   // block dynamically breaks to Page 2 so nothing gets squeezed.
   const isTableFullPage = totalTextLength > 300 || subscriptionItems.length > 2 || subscriptionItems.some(i => (i.subscription || '').includes('<li') || (i.subscription || '').includes('<table'));
+  const isCompact = isTableFullPage;
 
-  const logoWidth = 220;
-  const logoHeight = 60;
-  const headerBottomMargin = 6;
+  const logoWidth = 200;
+  const logoHeight = 50;
+  const headerBottomMargin = 4;
   const headerRowMargin = 2;
-  const clientInfoMarginBottom = 4;
-  const clientInfoRowMarginBottom = 1.5;
-  const tableHeaderMarginTop = 6;
-  const tableMarginBottom = 6;
-  const tableHeaderMinHeight = 22;
-  const tableCellPadding = 4.0;
-  const tableFontSize = 9.2;
-  const amountFontSize = 13.0;
-  const noteFontSize = 11.5;
-  const wordAmountFontSize = 10.0;
-  const amountSectionPadding = 4.5;
-  const spacingMargin = 6;
-  const sectionHeaderFont = 12.0;
+  const clientInfoMarginBottom = 3;
+  const clientInfoRowMarginBottom = 1.2;
+  const tableHeaderMarginTop = 3;
+  const tableMarginBottom = 4;
+  const tableHeaderMinHeight = 18;
+  const tableCellPadding = 2.8;
+  const tableFontSize = 8.5;
+  const amountFontSize = 12.0;
+  const noteFontSize = 10.5;
+  const wordAmountFontSize = 9.5;
+  const amountSectionPadding = 4.0;
+  const spacingMargin = 5;
+  const sectionHeaderFont = 11.5;
   const sectionHeaderMarginBottom = 3;
-  const paymentLabelFont = 9.5;
-  const paymentValFont = 9.5;
-  const paymentMarginBottom = 3.0;
-  const declarationTextFont = 9.0;
-  const declarationItemFont = 8.2;
-  const declarationItemLineHeight = 1.25;
-  const signatureSectionMarginTop = 14;
+  const paymentLabelFont = 9.0;
+  const paymentValFont = 9.0;
+  const paymentMarginBottom = 2.5;
+  const declarationTextFont = 8.5;
+  const declarationItemFont = 8.0;
+  const declarationItemLineHeight = 1.22;
+  const signatureSectionMarginTop = 12;
   const signatureImageWidth = 115;
-  const signatureImageHeight = 50;
-  const signatureLabelFont = 10.5;
+  const signatureImageHeight = 48;
+  const signatureLabelFont = 10.0;
 
   const cellStyle = {
     ...styles.tableCell,
     fontSize: tableFontSize,
-    lineHeight: 1.28,
+    lineHeight: 1.18,
     marginTop: 0,
     marginBottom: 0,
     padding: 0
@@ -761,13 +762,13 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
 
       {/* No. & Dated Row */}
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: headerRowMargin, marginBottom: headerRowMargin }}>
-        <Text style={{ fontSize: isCompact ? 10.0 : 10.5, fontFamily: 'Helvetica-Bold' }}>
+        <Text style={{ fontSize: 10.5, fontFamily: 'Helvetica-Bold' }}>
           No. {quotationInfo.number}
         </Text>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <Text style={{ fontSize: isCompact ? 10.0 : 10.5, fontFamily: 'Helvetica-Bold', marginRight: 10 }}>Dated</Text>
+          <Text style={{ fontSize: 10.5, fontFamily: 'Helvetica-Bold', marginRight: 10 }}>Dated</Text>
           <View style={{ borderBottomWidth: 1, borderColor: '#000000', width: 130, alignItems: 'center' }}>
-            <Text style={{ fontSize: isCompact ? 10.0 : 10.5, fontFamily: 'Helvetica-Bold', marginBottom: 2 }}>{quotationInfo.date}</Text>
+            <Text style={{ fontSize: 10.5, fontFamily: 'Helvetica-Bold', marginBottom: 2 }}>{quotationInfo.date}</Text>
           </View>
         </View>
       </View>
@@ -824,7 +825,7 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
         </View>
 
         {/* Unified Subscription Table (Word Layout Rules) */}
-        <View style={[styles.table, { marginTop: tableHeaderMarginTop, marginBottom: tableMarginBottom }, isTableFullPage && { flex: 1, minHeight: 560 }]}>
+        <View style={[styles.table, { marginTop: tableHeaderMarginTop, marginBottom: tableMarginBottom }]} wrap={false}>
           {/* Table Header */}
           <View style={[styles.tableHeaderRow, { minHeight: tableHeaderMinHeight }]}>
             <View style={styles.tableHeaderColLeft}>
@@ -845,9 +846,9 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
                   flexDirection: 'row',
                   alignItems: 'stretch',
                   marginTop: -2,
-                },
-                isTableFullPage && index === subscriptionItems.length - 1 && { flexGrow: 1 }
+                }
               ]}
+              wrap={false}
             >
               {/* Left column label — fixed 20% width */}
               <View
