@@ -41,7 +41,6 @@ const INITIAL_FORM_DATA = {
   clientName: '', address: '', contactPerson: '', phone: '',
   amount: '', amountCustomText: '', verticalAlignment: 'top', baseCurrency: 'INR', displayCurrency: 'INR',
   baseAmount: '', isRevised: false, revisionNumber: 0,
-  baseQuotationNumber: '',
   ...BANK_DETAILS
 };
 
@@ -54,8 +53,8 @@ const styles = StyleSheet.create({
   page: {
     flexDirection: 'column',
     backgroundColor: '#FFFFFF',
-    paddingTop: 14,
-    paddingBottom: 14,
+    paddingTop: 10,
+    paddingBottom: 10,
     paddingHorizontal: 12,
     fontFamily: 'Helvetica',
   },
@@ -270,6 +269,19 @@ const styles = StyleSheet.create({
 });
 
 // Helper function to strip HTML and preserve line breaks
+const cleanCurrencyText = (str) => {
+  if (!str) return '';
+  return String(str)
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\u00A0/g, ' ')
+    .replace(/([a-zA-Z&])([¹₹\u20B9])/g, '$1 $2')
+    .replace(/[₹\u20B9]/g, 'Rs. ')
+    .replace(/&(?:#8377;|#x20b9;)/gi, 'Rs. ')
+    .replace(/¹\s*(?=\d)/g, 'Rs. ')
+    .replace(/¹/g, 'Rs. ')
+    .replace(/Rs\.\s+/g, 'Rs. ');
+};
+
 const stripHtmlAndPreserveBreaks = (html) => {
   if (!html) return '';
   let text = html.replace(/<br\s*\/?>/gi, '\n')
@@ -283,8 +295,8 @@ const stripHtmlAndPreserveBreaks = (html) => {
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
-    .replace(/&rsquo;/g, "'")
-  return text.trim();
+    .replace(/&rsquo;/g, "'");
+  return cleanCurrencyText(text).trim();
 };
 
 const numberToWords = (num) => {
@@ -325,18 +337,20 @@ const formatAmountWithCommas = (amount) => {
     : num.toLocaleString('en-IN', { maximumFractionDigits: 0 });
 };
 
-const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = false, isExtraCompact = false }) => {
+const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = false }) => {
   const htmlString = typeof html === 'string' ? html : (html ? String(html) : '');
   if (!htmlString.trim()) return <Text style={customStyle}>{""}</Text>;
   if (typeof window === 'undefined') return <Text style={customStyle}>{""}</Text>;
 
+  const sanitizedHtml = cleanCurrencyText(htmlString);
   const parser = new window.DOMParser();
-  const doc = parser.parseFromString(htmlString, 'text/html');
+  const doc = parser.parseFromString(sanitizedHtml, 'text/html');
 
   // Process inline nodes (returns text string or <Text> node with inline formatting)
   const processInlineNode = (node, keyPrefix, inheritedStyle = {}) => {
     if (node.nodeType === 3) {
-      const text = node.textContent.replace(/&nbsp;/g, ' ').replace(/\u00A0/g, ' ');
+      let text = node.textContent.replace(/&nbsp;/g, ' ').replace(/\u00A0/g, ' ');
+      text = cleanCurrencyText(text);
       // If node contains only newlines and whitespace (formatting whitespace between HTML tags), ignore it
       if (!text.replace(/[\r\n\t ]+/g, '')) return '';
       // Replace newline characters inside inline text with a space so text doesn't drop to next line
@@ -372,6 +386,7 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
 
       const children = Array.from(node.childNodes)
         .map((child, idx) => processInlineNode(child, `${keyPrefix}-${idx}`, style))
+        .flat(Infinity)
         .filter(Boolean);
 
       return children;
@@ -379,15 +394,132 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
     return '';
   };
 
-  const blockMargin = 2.5;
-  const listMargin = 2.0;
-  const listItemMargin = 1.5;
-  const fallbackMargin = 1.5;
+  const blockMargin = isCompact ? 1.0 : 2.5;
+  const listMargin = isCompact ? 1.0 : 2.5;
+  const listItemMargin = isCompact ? 0.6 : 2.0;
+  const fallbackMargin = isCompact ? 0.8 : 2.0;
+
+  const BLOCK_TAGS = ['p', 'div', 'ul', 'ol', 'table', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'section', 'article', 'header', 'footer'];
+
+  const hasBlockChildren = (el) => {
+    if (!el || el.nodeType !== 1) return false;
+    return Array.from(el.children).some(child => BLOCK_TAGS.includes(child.tagName.toLowerCase()));
+  };
+
+  // Render HTML Table inside description
+  const renderTableNode = (tableNode, keyIndex) => {
+    const rows = Array.from(tableNode.querySelectorAll('tr'));
+    if (rows.length === 0) return null;
+
+    let maxCols = 0;
+    const rowData = rows.map(tr => {
+      const cells = Array.from(tr.children).filter(el => ['th', 'td'].includes(el.tagName.toLowerCase()));
+      if (cells.length > maxCols) maxCols = cells.length;
+      return {
+        isHeader: tr.parentElement?.tagName.toLowerCase() === 'thead' || cells.some(c => c.tagName.toLowerCase() === 'th'),
+        cells
+      };
+    });
+
+    if (maxCols === 0) return null;
+
+    const getColWidth = (colIdx, totalCols, cell) => {
+      const styleAttr = cell?.getAttribute && cell.getAttribute('style');
+      if (styleAttr) {
+        const match = styleAttr.match(/width\s*:\s*(\d+(?:\.\d+)?)(%|px)?/i);
+        if (match && match[2] === '%') return `${match[1]}%`;
+      }
+      if (totalCols === 2) {
+        return colIdx === 0 ? '68%' : '32%';
+      }
+      return `${(100 / totalCols).toFixed(1)}%`;
+    };
+
+    const tableFontSize = isCompact ? 8.0 : 9.0;
+
+    return (
+      <View key={`tbl-${keyIndex}`} style={{
+        width: '100%',
+        marginTop: isCompact ? 1.5 : 3,
+        marginBottom: isCompact ? 2 : 4,
+        borderTopWidth: 1,
+        borderTopColor: '#000000',
+        borderLeftWidth: 1,
+        borderLeftColor: '#000000',
+        borderRightWidth: 1,
+        borderRightColor: '#000000',
+        borderBottomWidth: 1,
+        borderBottomColor: '#000000',
+      }}>
+        {rowData.map((row, rIdx) => {
+          const rowText = row.cells.map(c => c.textContent || '').join(' ').toLowerCase();
+          const isTotalRow = rowText.includes('total');
+          const isHeaderRow = row.isHeader || (rIdx === 0 && row.cells.some(c => c.tagName.toLowerCase() === 'th'));
+          const rowBg = isHeaderRow ? '#f0f0f0' : (isTotalRow ? '#f9f9f9' : '#ffffff');
+          const isLastRow = rIdx === rowData.length - 1;
+
+          return (
+            <View key={`tr-${keyIndex}-${rIdx}`} style={{
+              flexDirection: 'row',
+              backgroundColor: rowBg,
+              borderBottomWidth: isLastRow ? 0 : 1,
+              borderBottomColor: '#000000',
+              minHeight: isCompact ? 14 : 18,
+              alignItems: 'center',
+            }}>
+              {row.cells.map((cell, cIdx) => {
+                const isFirstCol = cIdx === 0;
+                const isLastCol = cIdx === row.cells.length - 1;
+                const colWidth = getColWidth(cIdx, row.cells.length, cell);
+                const isTh = cell.tagName.toLowerCase() === 'th';
+                const isBold = isHeaderRow || isTh || isTotalRow;
+
+                let cellAlign = isFirstCol ? 'left' : (row.cells.length === 2 ? 'right' : 'center');
+                if (cell.getAttribute && cell.getAttribute('align')) {
+                  cellAlign = cell.getAttribute('align');
+                } else if (cell.style && cell.style.textAlign) {
+                  cellAlign = cell.style.textAlign;
+                }
+
+                const cellInlineContent = Array.from(cell.childNodes)
+                  .map((child, idx) => processInlineNode(child, `c-${keyIndex}-${rIdx}-${cIdx}-${idx}`, {
+                    fontFamily: isBold ? 'Helvetica-Bold' : 'Helvetica',
+                    fontSize: tableFontSize,
+                  }))
+                  .flat(Infinity)
+                  .filter(Boolean);
+
+                return (
+                  <View key={`td-${keyIndex}-${rIdx}-${cIdx}`} style={{
+                    width: colWidth,
+                    paddingVertical: isCompact ? 1.2 : 2.5,
+                    paddingHorizontal: isCompact ? 3.5 : 5,
+                    borderRightWidth: isLastCol ? 0 : 1,
+                    borderRightColor: '#000000',
+                    justifyContent: 'center',
+                  }}>
+                    <Text style={{
+                      fontSize: tableFontSize,
+                      fontFamily: isBold ? 'Helvetica-Bold' : 'Helvetica',
+                      textAlign: cellAlign,
+                      lineHeight: 1.25,
+                    }}>
+                      {cellInlineContent.length > 0 ? cellInlineContent : ""}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          );
+        })}
+      </View>
+    );
+  };
 
   // Process block node (returns <View> containing <Text>)
   const renderBlockNode = (node, keyIndex) => {
     if (node.nodeType === 3) {
-      const text = node.textContent.replace(/&nbsp;/g, ' ').replace(/\u00A0/g, ' ').trim();
+      const text = cleanCurrencyText(node.textContent).trim();
       if (!text) return null;
       return (
         <View key={`blk-${keyIndex}`} style={{ marginBottom: fallbackMargin, width: '100%' }}>
@@ -401,6 +533,21 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
       if (tag === 'br') {
         return null;
       }
+
+      // Handle HTML Table
+      if (tag === 'table') {
+        return renderTableNode(node, keyIndex);
+      }
+
+      // Handle generic block containers that contain child block elements (e.g. wrapper div, section)
+      if (['div', 'section', 'article', 'blockquote', 'header', 'footer'].includes(tag) && hasBlockChildren(node)) {
+        const childBlocks = Array.from(node.childNodes)
+          .map((child, idx) => renderBlockNode(child, `${keyIndex}-${idx}`))
+          .flat(Infinity)
+          .filter(Boolean);
+        return childBlocks;
+      }
+
       let blockStyle = { ...customStyle, marginTop: 0, marginBottom: 0, padding: 0 };
       let textAlign = customStyle?.textAlign || 'left';
 
@@ -427,6 +574,10 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
           return null; // Ignore completely blank paragraphs
         }
 
+        if (tag.startsWith('h')) {
+          blockStyle.fontFamily = 'Helvetica-Bold';
+        }
+
         const inlineContent = Array.from(node.childNodes)
           .map((child, idx) => processInlineNode(child, `inl-${keyIndex}-${idx}`, {}))
           .flat(Infinity)
@@ -437,7 +588,9 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
         }
         return (
           <View key={`blk-${keyIndex}`} style={{ marginBottom: blockMargin, width: '100%' }}>
-            <Text style={{ ...blockStyle, width: '100%', textAlign, marginTop: 0, marginBottom: 0, padding: 0 }}>{inlineContent}</Text>
+            <Text style={{ ...blockStyle, width: '100%', textAlign, marginTop: 0, marginBottom: 0, padding: 0 }}>
+              {inlineContent.length > 0 ? inlineContent : ""}
+            </Text>
           </View>
         );
       }
@@ -449,7 +602,7 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
         if (validListItems.length === 0) return null;
 
         return (
-          <View key={`blk-${keyIndex}`} style={{ marginBottom: listMargin, paddingLeft: isExtraCompact ? 2 : 6, width: '100%' }}>
+          <View key={`blk-${keyIndex}`} style={{ marginBottom: listMargin, paddingLeft: isCompact ? 3 : 6, width: '100%' }}>
             {validListItems.map((liNode, liIdx) => {
               const inlineContent = Array.from(liNode.childNodes)
                 .map((child, idx) => processInlineNode(child, `li-${keyIndex}-${liIdx}-${idx}`, {}))
@@ -467,7 +620,9 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
                     {tag === 'ol' ? `${liIdx + 1}.` : '•'}
                   </Text>
                   <View style={{ flex: 1 }}>
-                    <Text style={{ ...blockStyle, textAlign, marginTop: 0, marginBottom: 0, padding: 0 }}>{inlineContent}</Text>
+                    <Text style={{ ...blockStyle, textAlign, marginTop: 0, marginBottom: 0, padding: 0 }}>
+                      {inlineContent.length > 0 ? inlineContent : ""}
+                    </Text>
                   </View>
                 </View>
               );
@@ -481,12 +636,15 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
 
       const inlineContent = Array.from(node.childNodes)
         .map((child, idx) => processInlineNode(child, `fallback-${keyIndex}-${idx}`, {}))
+        .flat(Infinity)
         .filter(Boolean);
 
       if (inlineContent.length === 0) return null;
       return (
         <View key={`blk-${keyIndex}`} style={{ marginBottom: fallbackMargin, width: '100%' }}>
-          <Text style={{ ...blockStyle, width: '100%', textAlign, marginTop: 0, marginBottom: 0, padding: 0 }}>{inlineContent}</Text>
+          <Text style={{ ...blockStyle, width: '100%', textAlign, marginTop: 0, marginBottom: 0, padding: 0 }}>
+            {inlineContent.length > 0 ? inlineContent : ""}
+          </Text>
         </View>
       );
     }
@@ -496,6 +654,7 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
 
   const blockNodes = Array.from(doc.body.childNodes)
     .map((node, i) => renderBlockNode(node, i))
+    .flat(Infinity)
     .filter(Boolean);
 
   if (blockNodes.length === 0) {
@@ -521,44 +680,42 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
     return acc + getVisibleTextLength(item.serialNumber) + getVisibleTextLength(item.subscription);
   }, 0);
 
-  // Dynamic layout settings - comfortable, readable, natural pagination across 2 pages
+  // Dynamic layout settings - comfortable, readable, natural pagination across pages
   const isCompact = totalTextLength > 600 || subscriptionItems.length > 2;
-  const isExtraCompact = false;
-  const isUltraCompact = false;
 
-  const logoWidth = isCompact ? 210 : 240;
-  const logoHeight = isCompact ? 58 : 68;
-  const headerBottomMargin = isCompact ? 5 : 8;
-  const headerRowMargin = isCompact ? 2 : 4;
-  const clientInfoMarginBottom = isCompact ? 3 : 5;
-  const clientInfoRowMarginBottom = isCompact ? 1.5 : 2.5;
-  const tableHeaderMarginTop = isCompact ? 6 : 8;
-  const tableMarginBottom = isCompact ? 6 : 8;
-  const tableHeaderMinHeight = 24;
-  const tableCellPadding = isCompact ? 3.5 : 4.5;
-  const tableFontSize = isCompact ? 9.0 : 9.5;
-  const amountFontSize = isCompact ? 12 : 13.5;
-  const noteFontSize = isCompact ? 10.5 : 12;
-  const wordAmountFontSize = isCompact ? 9.5 : 10.5;
-  const amountSectionPadding = isCompact ? 3 : 4;
-  const spacingMargin = isCompact ? 5 : 8;
-  const sectionHeaderFont = isCompact ? 11 : 12.5;
-  const sectionHeaderMarginBottom = isCompact ? 3 : 4;
-  const paymentLabelFont = isCompact ? 9.0 : 10.0;
-  const paymentValFont = isCompact ? 9.0 : 10.0;
-  const paymentMarginBottom = isCompact ? 2.5 : 3.5;
-  const declarationTextFont = isCompact ? 8.5 : 9.5;
-  const declarationItemFont = isCompact ? 8.0 : 9.0;
-  const declarationItemLineHeight = 1.25;
-  const signatureSectionMarginTop = isCompact ? 12 : 16;
-  const signatureImageWidth = isCompact ? 110 : 125;
-  const signatureImageHeight = isCompact ? 48 : 56;
-  const signatureLabelFont = isCompact ? 10.0 : 11.0;
+  const logoWidth = isCompact ? 190 : 240;
+  const logoHeight = isCompact ? 46 : 68;
+  const headerBottomMargin = isCompact ? 2 : 8;
+  const headerRowMargin = isCompact ? 1 : 4;
+  const clientInfoMarginBottom = isCompact ? 2 : 5;
+  const clientInfoRowMarginBottom = isCompact ? 1.0 : 2.5;
+  const tableHeaderMarginTop = isCompact ? 3 : 8;
+  const tableMarginBottom = isCompact ? 3 : 8;
+  const tableHeaderMinHeight = isCompact ? 18 : 24;
+  const tableCellPadding = isCompact ? 2.5 : 4.5;
+  const tableFontSize = isCompact ? 8.5 : 9.5;
+  const amountFontSize = isCompact ? 11 : 13.5;
+  const noteFontSize = isCompact ? 9.5 : 12;
+  const wordAmountFontSize = isCompact ? 8.5 : 10.5;
+  const amountSectionPadding = isCompact ? 2 : 4;
+  const spacingMargin = isCompact ? 2 : 8;
+  const sectionHeaderFont = isCompact ? 9.5 : 12.5;
+  const sectionHeaderMarginBottom = isCompact ? 2 : 4;
+  const paymentLabelFont = isCompact ? 8.5 : 10.0;
+  const paymentValFont = isCompact ? 8.5 : 10.0;
+  const paymentMarginBottom = isCompact ? 1.5 : 3.5;
+  const declarationTextFont = isCompact ? 7.8 : 9.5;
+  const declarationItemFont = isCompact ? 7.2 : 9.0;
+  const declarationItemLineHeight = isCompact ? 1.15 : 1.25;
+  const signatureSectionMarginTop = isCompact ? 4 : 16;
+  const signatureImageWidth = isCompact ? 95 : 125;
+  const signatureImageHeight = isCompact ? 36 : 56;
+  const signatureLabelFont = isCompact ? 9.0 : 11.0;
 
   const cellStyle = {
     ...styles.tableCell,
     fontSize: tableFontSize,
-    lineHeight: 1.28,
+    lineHeight: isCompact ? 1.20 : 1.28,
     marginTop: 0,
     marginBottom: 0,
     padding: 0
@@ -585,11 +742,11 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
               <Text style={{ fontSize: 10.0, fontFamily: 'Helvetica-Bold', lineHeight: 1.2 }}>Zirakpur, Punjab Pin : 140603</Text>
             </View>
           </View>
-          <View style={{ backgroundColor: '#000000', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: isExtraCompact ? 16 : 18, width: 260 }}>
+          <View style={{ backgroundColor: '#000000', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: 18, width: 260 }}>
             <Svg viewBox="0 0 24 24" style={{ width: 10, height: 10, marginRight: 4 }}>
               <Path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" fill="#ffffff" />
             </Svg>
-            <Text style={{ color: '#ffffff', fontSize: isExtraCompact ? 8.5 : 9.5, fontFamily: 'Helvetica-Bold' }}>90414-99964/73</Text>
+            <Text style={{ color: '#ffffff', fontSize: 9.5, fontFamily: 'Helvetica-Bold' }}>90414-99964/73</Text>
           </View>
         </View>
 
@@ -601,20 +758,13 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
 
       {/* No. & Dated Row */}
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: headerRowMargin, marginBottom: headerRowMargin }}>
+        <Text style={{ fontSize: isCompact ? 10.0 : 10.5, fontFamily: 'Helvetica-Bold' }}>
+          No. {quotationInfo.number}
+        </Text>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <Text style={{ fontSize: isExtraCompact ? 9.5 : (isCompact ? 10.0 : 10.5), fontFamily: 'Helvetica-Bold' }}>
-            No. {quotationInfo.number}
-          </Text>
-          {formData?.isRevised && (
-            <Text style={{ fontSize: isExtraCompact ? 8.0 : 9.0, fontFamily: 'Helvetica-Bold', color: '#D97706', marginLeft: 6 }}>
-              [REVISED - R{formData.revisionNumber || 1}]
-            </Text>
-          )}
-        </View>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <Text style={{ fontSize: isExtraCompact ? 9.5 : (isCompact ? 10.0 : 10.5), fontFamily: 'Helvetica-Bold', marginRight: 10 }}>Dated</Text>
-          <View style={{ borderBottomWidth: 1, borderColor: '#000000', width: isExtraCompact ? 100 : 130, alignItems: 'center' }}>
-            <Text style={{ fontSize: isExtraCompact ? 9.5 : (isCompact ? 10.0 : 10.5), fontFamily: 'Helvetica-Bold', marginBottom: 2 }}>{quotationInfo.date}</Text>
+          <Text style={{ fontSize: isCompact ? 10.0 : 10.5, fontFamily: 'Helvetica-Bold', marginRight: 10 }}>Dated</Text>
+          <View style={{ borderBottomWidth: 1, borderColor: '#000000', width: 130, alignItems: 'center' }}>
+            <Text style={{ fontSize: isCompact ? 10.0 : 10.5, fontFamily: 'Helvetica-Bold', marginBottom: 2 }}>{quotationInfo.date}</Text>
           </View>
         </View>
       </View>
@@ -631,9 +781,9 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
         <View style={{ marginBottom: clientInfoMarginBottom }}>
           {/* Business Name Row */}
           <View style={{ flexDirection: 'row', alignItems: 'flex-end', marginBottom: clientInfoRowMarginBottom }}>
-            <Text style={{ fontSize: isExtraCompact ? 9 : 10, fontFamily: 'Helvetica-Bold', width: 95 }}>Business Name</Text>
+            <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', width: 95 }}>Business Name</Text>
             <View style={{ borderBottomWidth: 1, borderColor: '#000000', flex: 1, paddingBottom: clientInfoRowMarginBottom, paddingLeft: 4 }}>
-              <Text style={{ fontSize: isExtraCompact ? 9 : 10, fontFamily: 'Helvetica-Bold' }} maxLines={1}>
+              <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold' }} maxLines={1}>
                 {(formData.clientName || '').replace(/[\r\n]+/g, ' ').trim()}
               </Text>
             </View>
@@ -641,9 +791,9 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
 
           {/* Address Row */}
           <View style={{ flexDirection: 'row', alignItems: 'flex-end', marginBottom: clientInfoRowMarginBottom }}>
-            <Text style={{ fontSize: isExtraCompact ? 9 : 10, fontFamily: 'Helvetica-Bold', width: 95 }}>Address</Text>
+            <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', width: 95 }}>Address</Text>
             <View style={{ borderBottomWidth: 1, borderColor: '#000000', flex: 1, paddingBottom: clientInfoRowMarginBottom, paddingLeft: 4 }}>
-              <Text style={{ fontSize: isExtraCompact ? 9 : 10, fontFamily: 'Helvetica-Bold' }} maxLines={1}>
+              <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold' }} maxLines={1}>
                 {(formData.address || '').replace(/[\r\n]+/g, ', ').trim()}
               </Text>
             </View>
@@ -652,17 +802,17 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
           {/* Contact & Phone Row */}
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
             <View style={{ flexDirection: 'row', alignItems: 'flex-end', width: '48%' }}>
-              <Text style={{ fontSize: isExtraCompact ? 9 : 10, fontFamily: 'Helvetica-Bold', width: 95 }}>Contact Person</Text>
+              <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', width: 95 }}>Contact Person</Text>
               <View style={{ borderBottomWidth: 1, borderColor: '#000000', flex: 1, paddingBottom: clientInfoRowMarginBottom, paddingLeft: 4 }}>
-                <Text style={{ fontSize: isExtraCompact ? 9 : 10, fontFamily: 'Helvetica-Bold' }} maxLines={1}>
+                <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold' }} maxLines={1}>
                   {(formData.contactPerson || '').replace(/[\r\n]+/g, ' ').trim()}
                 </Text>
               </View>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'flex-end', width: '48%' }}>
-              <Text style={{ fontSize: isExtraCompact ? 9 : 10, fontFamily: 'Helvetica-Bold', width: 85 }}>Phone/Mobile</Text>
+              <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', width: 85 }}>Phone/Mobile</Text>
               <View style={{ borderBottomWidth: 1, borderColor: '#000000', flex: 1, paddingBottom: clientInfoRowMarginBottom, paddingLeft: 4 }}>
-                <Text style={{ fontSize: isExtraCompact ? 9 : 10, fontFamily: 'Helvetica-Bold' }} maxLines={1}>
+                <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold' }} maxLines={1}>
                   {(formData.phone || '').replace(/[\r\n]+/g, ' ').trim()}
                 </Text>
               </View>
@@ -673,7 +823,7 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
         {/* Unified Subscription Table (Word Layout Rules) */}
         <View style={[styles.table, { marginTop: tableHeaderMarginTop, marginBottom: tableMarginBottom }]}>
           {/* Table Header */}
-          <View style={[styles.tableHeaderRow, { minHeight: tableHeaderMinHeight }]} minPresenceAhead={50}>
+          <View style={[styles.tableHeaderRow, { minHeight: tableHeaderMinHeight }]}>
             <View style={styles.tableHeaderColLeft}>
               <Text style={[styles.tableHeaderCellText, { fontSize: tableFontSize }]}>SUBSCRIPTION</Text>
             </View>
@@ -694,7 +844,6 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
                   marginTop: -2,
                 }
               ]}
-              wrap={false}
             >
               {/* Left column label — fixed 20% width */}
               <View
@@ -716,7 +865,6 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
                   customStyle={{ ...cellStyle, fontFamily: 'Helvetica-Bold', textAlign: 'center' }}
                   verticalAlignment={formData.verticalAlignment}
                   isCompact={isCompact}
-                  isExtraCompact={isExtraCompact}
                 />
               </View>
               {/* Right column content — 80% width */}
@@ -735,17 +883,16 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
                   customStyle={{ ...cellStyle, fontFamily: 'Helvetica' }}
                   verticalAlignment={formData.verticalAlignment}
                   isCompact={isCompact}
-                  isExtraCompact={isExtraCompact}
                 />
               </View>
             </View>
           ))}
         </View>
 
-        <View style={{ marginTop: isExtraCompact ? 2 : 6 }}>
+        <View style={{ marginTop: isCompact ? 2 : 6 }}>
           {/* Group 1: Amount Section & Cheques Note */}
           <View wrap={false}>
-            <View style={[styles.amountSection, { padding: amountSectionPadding, marginTop: isExtraCompact ? 0 : 2, marginBottom: isExtraCompact ? 0 : 2 }]}>
+            <View style={[styles.amountSection, { padding: amountSectionPadding, marginTop: isCompact ? 0 : 2, marginBottom: isCompact ? 0 : 2 }]}>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, flexWrap: 'wrap' }}>
                 <Text style={[styles.amountText, { fontSize: amountFontSize }]}>AMOUNT</Text>
                 <Text style={[styles.amountText, { fontSize: amountFontSize }]}>
@@ -758,20 +905,20 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
                 ) : <Text style={styles.amountText}>{""}</Text>}
                 {formData.amountCustomText ? (
                   <Text style={[styles.amountText, { fontSize: noteFontSize, color: '#2563EB', fontFamily: 'Helvetica-Bold' }]}>
-                    - {formData.amountCustomText}
+                    - {cleanCurrencyText(formData.amountCustomText)}
                   </Text>
                 ) : <Text style={styles.amountText}>{""}</Text>}
               </View>
               {formData.amount ? (
-                <Text style={[styles.text, { textAlign: 'center', marginTop: isExtraCompact ? 1 : 4, fontFamily: 'Helvetica-Bold', fontSize: wordAmountFontSize }]}>
+                <Text style={[styles.text, { textAlign: 'center', marginTop: isCompact ? 1 : 4, fontFamily: 'Helvetica-Bold', fontSize: wordAmountFontSize }]}>
                   Amount in words: {numberToWords(formData.amount)}
                 </Text>
               ) : <Text style={styles.text}>{""}</Text>}
-              <Text style={[styles.text, { textAlign: 'center', marginTop: isExtraCompact ? 1 : 4, fontFamily: 'Helvetica-Bold', marginBottom: isExtraCompact ? 1 : 2, fontSize: wordAmountFontSize }]}>
+              <Text style={[styles.text, { textAlign: 'center', marginTop: isCompact ? 1 : 4, fontFamily: 'Helvetica-Bold', marginBottom: isCompact ? 1 : 2, fontSize: wordAmountFontSize }]}>
                 (GST EXTRA)
               </Text>
             </View>
-            <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: wordAmountFontSize, textAlign: 'center', marginTop: isExtraCompact ? 2 : 5, color: '#FF0000', marginBottom: isExtraCompact ? 2 : 5 }}>
+            <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: wordAmountFontSize, textAlign: 'center', marginTop: isCompact ? 2 : 5, color: '#FF0000', marginBottom: isCompact ? 2 : 5 }}>
               * Cheques should be drawn in favour of BiD
             </Text>
           </View>
@@ -803,7 +950,7 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
           <View wrap={false} style={{ marginTop: spacingMargin }}>
             <View style={{ marginBottom: spacingMargin }}>
               <Text style={[styles.sectionHeader, { fontSize: sectionHeaderFont, marginTop: 0, marginBottom: sectionHeaderMarginBottom }]}>DECLARATION</Text>
-              <Text style={[styles.declarationText, { fontSize: declarationTextFont, marginBottom: isExtraCompact ? 2 : 4 }]}>
+              <Text style={[styles.declarationText, { fontSize: declarationTextFont, marginBottom: isCompact ? 2 : 4 }]}>
                 This is an application for Promotional services to BUILDING INDIA DIGITAL.
               </Text>
               {[
@@ -817,11 +964,11 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
                 "I allow BUILDING INDIA DIGITAL to make commercial calls to my mobile number(s).",
                 "This declaration holds valid even if numbers registered for NDNC."
               ].map((item, index) => (
-                <Text key={index} style={[styles.declarationItem, { fontSize: declarationItemFont, lineHeight: declarationItemLineHeight, marginBottom: isExtraCompact ? 0.8 : 2.0 }]}>• {item}</Text>
+                <Text key={index} style={[styles.declarationItem, { fontSize: declarationItemFont, lineHeight: declarationItemLineHeight, marginBottom: isCompact ? 0.8 : 2.0 }]}>• {item}</Text>
               ))}
             </View>
 
-            <View style={[styles.signatureSection, { marginTop: signatureSectionMarginTop, minHeight: isExtraCompact ? 35 : 45 }]}>
+            <View style={[styles.signatureSection, { marginTop: signatureSectionMarginTop, minHeight: isCompact ? 35 : 45 }]}>
               <View style={styles.signatureBox}>
                 <Text style={[styles.signatureLabel, { fontSize: signatureLabelFont }]}>CLIENT SIGNATURE</Text>
                 <View style={{ height: 20, justifyContent: 'flex-end', alignItems: 'flex-start', marginTop: 0 }}>
@@ -830,7 +977,7 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
               </View>
               <View style={styles.signatureBox}>
                 <Text style={[styles.signatureLabel, { fontSize: signatureLabelFont }]}>ORGANISATION SIGNATURE</Text>
-                <View style={{ marginTop: isExtraCompact ? 0 : 2, alignItems: 'flex-start' }}>
+                <View style={{ marginTop: isCompact ? 0 : 2, alignItems: 'flex-start' }}>
                   <Image src={signatureImage} style={[styles.signatureImage, { width: signatureImageWidth, height: signatureImageHeight }]} />
                 </View>
               </View>
@@ -1026,53 +1173,25 @@ const useClickOutside = (ref, callback) => {
 
 // FormField Component
 const FormField = ({ label, value, onChange, type = 'text', rows = 1 }) => (
-  <div className="mb-4">
-    <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+  <div className="mb-2">
+    <label className="block text-xs font-semibold text-gray-700 mb-0.5">{label}</label>
     {type === 'textarea' ? (
       <textarea
         value={value}
         onChange={(e) => onChange(e.target.value)}
         rows={rows}
-        className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
       />
     ) : (
       <input
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
       />
     )}
   </div>
 );
-
-// Helper to sanitize object before saving to Firestore to prevent "Unsupported field value: undefined" errors
-const cleanForFirestore = (obj) => {
-  if (obj === null || obj === undefined) return null;
-  if (Array.isArray(obj)) return obj.map(cleanForFirestore);
-  if (typeof obj === 'object') {
-    const cleaned = {};
-    for (const [key, value] of Object.entries(obj)) {
-      if (value !== undefined) {
-        cleaned[key] = cleanForFirestore(value);
-      }
-    }
-    return cleaned;
-  }
-  return obj;
-};
-
-// Helper to extract reference number from any quotation number string
-const extractRefNumber = (numStr) => {
-  if (!numStr || typeof numStr !== 'string') return null;
-  const matchSlash = numStr.match(/\/(\d{2,6})(?:\/REV|\/Rev|\/R)?$/i);
-  if (matchSlash) return parseInt(matchSlash[1], 10);
-  const matchOld = numStr.match(/^(\d{4})(\d{2})(\d{2})\/(\d+)/);
-  if (matchOld) return parseInt(matchOld[4], 10);
-  const matchDigits = numStr.match(/(\d{3,6})/);
-  if (matchDigits) return parseInt(matchDigits[1], 10);
-  return null;
-};
 
 // Main QuotationForm Component
 const QuotationForm = () => {
@@ -1097,7 +1216,7 @@ const QuotationForm = () => {
     sorted.forEach(quot => {
       const date = new Date(quot.savedAt || Date.now());
       const monthYear = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-      const groupKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      const groupKey = `${date.getFullYear()}-${String(date.getMonth()).padStart(2, '0')}`;
 
       if (!groupsMap[groupKey]) {
         groupsMap[groupKey] = { label: monthYear, quotations: [] };
@@ -1107,13 +1226,6 @@ const QuotationForm = () => {
 
     return Object.keys(groupsMap).sort().reverse().map(key => groupsMap[key]);
   }, [savedQuotations]);
-
-  // Auto-open first folder so saved quotations are immediately visible
-  useEffect(() => {
-    if (groupedQuotations.length > 0 && Object.keys(openFolders).length === 0) {
-      setOpenFolders({ [groupedQuotations[0].label]: true });
-    }
-  }, [groupedQuotations]);
 
   const toggleFolder = (label) => {
     setOpenFolders(prev => ({ ...prev, [label]: !prev[label] }));
@@ -1182,19 +1294,15 @@ const QuotationForm = () => {
   };
 
   useEffect(() => { generateQuotationInfo(); }, []);
+  useEffect(() => { generateQuotationInfo(); }, [formData.isRevised, formData.revisionNumber]);
 
   useEffect(() => {
     const fetchQuotations = async () => {
       try {
         const querySnapshot = await getDocs(collection(db, "quotations"));
         const quots = [];
-        querySnapshot.forEach((docSnap) => {
-          const data = docSnap.data();
-          quots.push({
-            ...data,
-            id: data.id ? String(data.id) : docSnap.id,
-            docId: docSnap.id
-          });
+        querySnapshot.forEach((doc) => {
+          quots.push(doc.data());
         });
         setSavedQuotations(quots);
       } catch (error) {
@@ -1203,6 +1311,29 @@ const QuotationForm = () => {
     };
     fetchQuotations();
   }, []);
+
+  const downloadSavedPDF = (pdfBase64, filename) => {
+    try {
+      const binaryString = window.atob(pdfBase64);
+      const len = binaryString.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      const blob = new Blob([bytes], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading saved PDF:', error);
+      alert('Error downloading saved PDF: ' + error.message);
+    }
+  };
 
   const addSubscriptionItem = () => {
     const newId = Math.max(...subscriptionItems.map(item => item.id), 0) + 1;
@@ -1234,224 +1365,141 @@ const QuotationForm = () => {
 
   const saveQuotation = async () => {
     try {
-      const qId = currentQuotationId ? String(currentQuotationId) : String(Date.now());
-      const baseQuotNum = formData.baseQuotationNumber || quotationInfo.number.split('/REV')[0];
+      // Generate PDF blob
+      const blob = await pdf(<QuotationPDF
+        formData={formData}
+        quotationInfo={quotationInfo}
+        subscriptionItems={subscriptionItems}
+      />).toBlob();
+
+      // Convert blob to base64
+      const reader = new FileReader();
+      const base64Promise = new Promise((resolve, reject) => {
+        reader.onloadend = () => {
+          const base64data = reader.result.split(',')[1];
+          resolve(base64data);
+        };
+        reader.onerror = reject;
+      });
+      reader.readAsDataURL(blob);
+      const pdfBase64 = await base64Promise;
 
       const quotationData = {
-        id: qId,
-        formData: {
-          ...formData,
-          baseQuotationNumber: baseQuotNum
-        },
-        subscriptionItems: subscriptionItems || [],
+        id: currentQuotationId || Date.now(),
+        formData: { ...formData },
+        subscriptionItems: [...subscriptionItems],
         quotationInfo: { ...quotationInfo },
         savedAt: new Date().toISOString(),
-        baseQuotationNumber: baseQuotNum
+        baseQuotationNumber: quotationInfo.number.split('/REV')[0],
+        pdfBase64: pdfBase64
       };
 
-      // Clean undefined values for Firestore
-      const cleanData = cleanForFirestore(quotationData);
-
       // Save to Firebase Firestore Database
-      const docRef = doc(db, "quotations", qId);
-      await setDoc(docRef, cleanData);
+      const docRef = doc(db, "quotations", quotationData.id.toString());
+      await setDoc(docRef, quotationData);
 
-      setSavedQuotations(prev => {
-        const exists = prev.some(q => String(q.id) === qId || String(q.docId) === qId);
-        if (exists) {
-          return prev.map(q => (String(q.id) === qId || String(q.docId) === qId) ? cleanData : q);
-        }
-        return [cleanData, ...prev];
-      });
-      setCurrentQuotationId(qId);
-      alert(`Quotation saved successfully to the database!${formData.isRevised ? ` (Revision ${formData.revisionNumber || 1})` : ''}`);
+      setSavedQuotations(prev => currentQuotationId ? prev.map(q => q.id === currentQuotationId ? quotationData : q) : [...prev, quotationData]);
+      setCurrentQuotationId(quotationData.id);
+      alert('Quotation saved successfully to the database!');
     } catch (error) {
       console.error('Error saving to database:', error);
       alert('Error saving quotation: ' + error.message);
     }
   };
 
+  const sanitizeDisplayContent = (content) => {
+    if (!content) return '';
+    return String(content)
+      .replace(/([a-zA-Z&])([¹₹\u20B9])/g, '$1 $2')
+      .replace(/¹\s*(?=\d)/g, '₹')
+      .replace(/¹/g, '₹');
+  };
+
   const loadQuotation = (quotation) => {
-    if (!quotation) return;
+    setFormData(quotation.formData);
+    const sanitizedItems = (quotation.subscriptionItems || []).map(item => ({
+      ...item,
+      serialNumber: sanitizeDisplayContent(item.serialNumber || ''),
+      subscription: sanitizeDisplayContent(item.subscription || '')
+    }));
+    setSubscriptionItems(sanitizedItems);
 
-    const incFormData = quotation.formData || {};
-    const rawNum = quotation.quotationInfo?.number || quotation.number || '';
-    const rawDate = quotation.quotationInfo?.date || quotation.date || '';
-
-    // Check old format (e.g. 20260630/0 or 20260630/4501)
-    let parsedNumber = rawNum;
-    let parsedRef = quotation.quotationInfo?.referenceNumber || extractRefNumber(rawNum);
-    const oldFormatMatch = rawNum.match(/^(\d{4})(\d{2})(\d{2})\/(\d+)(.*)$/);
+    let updatedQuotationInfo = { ...INITIAL_QUOTATION_INFO, ...(quotation?.quotationInfo || {}) };
+    const num = updatedQuotationInfo.number || '';
+    
+    // Check if it's in the old format (does not contain YYYY/MM/DD)
+    // Old format example: "20260630/0"
+    const oldFormatMatch = num.match(/^(\d{4})(\d{2})(\d{2})\/(\d+)(.*)$/);
     if (oldFormatMatch) {
-      const [_, year, month, day, refNumStr] = oldFormatMatch;
+      const [_, year, month, day, refNumStr, rest] = oldFormatMatch;
       let refNum = parseInt(refNumStr, 10);
       if (!refNum || refNum === 0) {
         const randomPrefix = Math.floor(10 + Math.random() * 90);
         refNum = randomPrefix * 100 + 1;
       }
-      parsedRef = refNum;
-      const isRev = incFormData.isRevised || rawNum.includes('/REV') || rawNum.includes('/Rev') || rawNum.includes('/R');
-      parsedNumber = `${year}/${month}/${day}/${refNum}${isRev ? '/REV' : ''}`;
-    }
-
-    const isRevised = Boolean(
-      incFormData.isRevised ||
-      quotation.isRevised ||
-      parsedNumber.includes('/REV') ||
-      parsedNumber.includes('/Rev') ||
-      parsedNumber.includes('/R')
-    );
-
-    let revNum = incFormData.revisionNumber ?? quotation.revisionNumber ?? 0;
-    if (isRevised && (!revNum || revNum === 0)) {
-      if (parsedRef) {
-        const ending = parsedRef % 100;
-        if (ending > 1) revNum = ending - 1;
+      const isRevised = quotation.formData?.isRevised || num.includes('/REV') || num.includes('/Rev') || num.includes('/R');
+      const suffix = isRevised ? '/REV' : '';
+      updatedQuotationInfo = {
+        ...updatedQuotationInfo,
+        number: `${year}/${month}/${day}/${refNum}${suffix}`,
+        referenceNumber: refNum
+      };
+      
+      // Also update formData if we parsed a revision from the number
+      if (isRevised && !quotation.formData?.isRevised) {
+        setFormData(prev => ({ ...prev, isRevised: true }));
       }
-      if (!revNum) revNum = 1;
     }
 
-    const mergedFormData = {
-      ...INITIAL_FORM_DATA,
-      ...incFormData,
-      clientName: incFormData.clientName || quotation.clientName || '',
-      address: incFormData.address || quotation.address || '',
-      contactPerson: incFormData.contactPerson || quotation.contactPerson || '',
-      phone: incFormData.phone || quotation.phone || '',
-      amount: incFormData.amount || quotation.amount || '',
-      quotationName: incFormData.quotationName || quotation.quotationName || '',
-      isRevised,
-      revisionNumber: revNum,
-      baseQuotationNumber: quotation.baseQuotationNumber || incFormData.baseQuotationNumber || parsedNumber.split('/REV')[0]
-    };
-
-    const incomingItems = quotation.subscriptionItems || quotation.items;
-    const items = Array.isArray(incomingItems) && incomingItems.length > 0
-      ? incomingItems
-      : [{ id: 1, serialNumber: '', subscription: '' }];
-
-    const updatedQuotationInfo = {
-      ...INITIAL_QUOTATION_INFO,
-      ...(quotation.quotationInfo || {}),
-      number: parsedNumber,
-      date: rawDate || quotation.quotationInfo?.date || '',
-      referenceNumber: parsedRef || quotation.quotationInfo?.referenceNumber || 0
-    };
-
-    setFormData(mergedFormData);
-    setSubscriptionItems(items);
     setQuotationInfo(updatedQuotationInfo);
-    setCurrentQuotationId(quotation.id ? String(quotation.id) : (quotation.docId ? String(quotation.docId) : null));
+    setCurrentQuotationId(quotation.id);
     setShowSavedQuotations(false);
-    setActiveTab('editor');
   };
 
-  const handleRevision = async (targetQuotationOrId = null) => {
+  const handleRevisionFromFirebase = async (quotationId) => {
     try {
-      let target = null;
-
-      if (targetQuotationOrId && typeof targetQuotationOrId === 'object') {
-        target = targetQuotationOrId;
-      } else if (targetQuotationOrId) {
-        const found = savedQuotations.find(q => String(q.id) === String(targetQuotationOrId) || String(q.docId) === String(targetQuotationOrId));
-        if (found) {
-          target = found;
-        } else {
-          const docRef = doc(db, "quotations", targetQuotationOrId.toString());
-          const docSnap = await getDoc(docRef);
-          if (docSnap.exists()) {
-            target = { ...docSnap.data(), id: docSnap.id, docId: docSnap.id };
-          }
-        }
+      const docRef = doc(db, "quotations", quotationId.toString());
+      const docSnap = await getDoc(docRef);
+      if (!docSnap.exists()) {
+        return alert('Quotation not found in database!');
       }
+      const quotation = docSnap.data();
 
-      // If no target specified (e.g. clicked from Editor), use current editor form data
-      if (!target) {
-        target = {
-          id: currentQuotationId,
-          formData: { ...formData },
-          subscriptionItems: [...subscriptionItems],
-          quotationInfo: { ...quotationInfo },
-          baseQuotationNumber: formData.baseQuotationNumber || quotationInfo.number.split('/REV')[0]
-        };
-      }
+      // Identify the base quotation and calculate the next revision number
+      const baseNumber = quotation.baseQuotationNumber;
+      const relatedQuotations = savedQuotations.filter(q => q.baseQuotationNumber === baseNumber);
+      const nextRevision = Math.max(0, ...relatedQuotations.map(q => q.formData?.revisionNumber || 0)) + 1;
 
-      const targetFormData = target.formData || {};
-      const targetQuotInfo = target.quotationInfo || {};
-      const targetNum = targetQuotInfo.number || target.number || quotationInfo.number || '';
-
-      // Determine original reference number and base prefix (e.g. 4501 -> prefix 45)
-      let refNum = targetQuotInfo.referenceNumber || extractRefNumber(targetNum);
-      if (!refNum || refNum === 0) {
-        const randomPrefix = Math.floor(10 + Math.random() * 90);
-        refNum = randomPrefix * 100 + 1;
-      }
-      const basePrefix = Math.floor(refNum / 100);
-
-      // Determine root base quotation number
-      const baseQuotationNumber = target.baseQuotationNumber || targetFormData.baseQuotationNumber || targetNum.split('/REV')[0];
-
-      // Find all related quotations in saved list
-      const relatedQuotations = savedQuotations.filter(q => {
-        if (!q) return false;
-        if (baseQuotationNumber && (q.baseQuotationNumber === baseQuotationNumber || q.formData?.baseQuotationNumber === baseQuotationNumber)) {
-          return true;
-        }
-        const qRef = q.quotationInfo?.referenceNumber || extractRefNumber(q.quotationInfo?.number || q.number);
-        if (qRef && Math.floor(qRef / 100) === basePrefix) {
-          return true;
-        }
-        return false;
-      });
-
-      // Calculate next revision number
-      const maxExistingRevision = relatedQuotations.reduce((max, q) => {
-        const r = q.formData?.revisionNumber ?? q.revisionNumber;
-        return typeof r === 'number' ? Math.max(max, r) : max;
-      }, 0);
-
-      const currentRev = targetFormData.revisionNumber ?? (targetNum.includes('/REV') ? 1 : 0);
-      const nextRevision = Math.max(maxExistingRevision, currentRev) + 1;
-
-      // Keep base prefix, last two digits = (nextRevision + 1), e.g. prefix 45, rev 1 -> 4502
+      // Keep the first two digits of referenceNumber, and set the last two digits to (nextRevision + 1)
+      const originalRef = quotation.quotationInfo?.referenceNumber || 1001;
+      const basePrefix = Math.floor(originalRef / 100) || Math.floor(10 + Math.random() * 90);
       const newRefNum = basePrefix * 100 + (nextRevision + 1);
 
-      // Generate date for revision
+      // Generate new adapted number and date
       const date = new Date();
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, '0');
       const day = String(date.getDate()).padStart(2, '0');
-      const dateFormatted = date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '-');
       const newNumber = `${year}/${month}/${day}/${newRefNum}/REV`;
 
       setFormData({
-        ...INITIAL_FORM_DATA,
-        ...targetFormData,
+        ...quotation.formData,
         isRevised: true,
-        revisionNumber: nextRevision,
-        baseQuotationNumber: baseQuotationNumber
+        revisionNumber: nextRevision
       });
-
-      const incomingItems = target.subscriptionItems || target.items;
-      setSubscriptionItems(
-        Array.isArray(incomingItems) && incomingItems.length > 0
-          ? incomingItems
-          : [{ id: 1, serialNumber: '', subscription: '' }]
-      );
-
+      setSubscriptionItems(quotation.subscriptionItems);
       setQuotationInfo({
         number: newNumber,
-        date: dateFormatted,
+        date: date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '-'),
         referenceNumber: newRefNum
       });
-
-      setCurrentQuotationId(null); // Save as new revision document
-      setActiveTab('editor');
-
-      alert(`Quotation loaded and marked as Revision ${nextRevision} (${newNumber}). Click Save to store in database.`);
+      
+      setCurrentQuotationId(null); // Clear ID so it will save as a new document
+      setActiveTab('editor'); // Switch to editor tab
+      alert(`Quotation loaded from database and marked as Revision ${nextRevision} (ending in ${String(nextRevision + 1).padStart(2, '0')}).`);
     } catch (error) {
-      console.error('Error handling revision:', error);
-      alert('Error handling revision: ' + error.message);
+      console.error('Error fetching for revision:', error);
+      alert('Error fetching quotation for revision: ' + error.message);
     }
   };
 
@@ -1479,7 +1527,7 @@ const QuotationForm = () => {
     if (!isEditing) return;
     const item = subscriptionItems.find(i => i.id === id);
     if (item) {
-      setEditorContent(item[field] || '');
+      setEditorContent(sanitizeDisplayContent(item[field] || ''));
       setShowTextEditor({ id, field });
     }
   };
@@ -1489,13 +1537,12 @@ const QuotationForm = () => {
   };
 
   const deleteQuotation = async (id) => {
-    if (!id) return;
     if (window.confirm('Are you sure you want to delete this quotation?')) {
       try {
         const docRef = doc(db, "quotations", id.toString());
         await deleteDoc(docRef);
-        setSavedQuotations(prev => prev.filter(q => String(q.id) !== String(id) && String(q.docId) !== String(id)));
-        if (String(currentQuotationId) === String(id)) setCurrentQuotationId(null);
+        setSavedQuotations(prev => prev.filter(q => q.id !== id));
+        if (currentQuotationId === id) setCurrentQuotationId(null);
         alert('Quotation deleted successfully from the database!');
       } catch (error) {
         console.error('Error deleting from database:', error);
@@ -1509,9 +1556,9 @@ const QuotationForm = () => {
     if (!content && isEditing) return <div className="text-gray-500 italic min-h-8 p-1 cursor-pointer">Click to add {field === 'serialNumber' ? 'subscription' : 'description details'}...</div>;
     if (!content && !isEditing) return <div className="min-h-8 p-1">&nbsp;</div>;
     return <div
-      dangerouslySetInnerHTML={{ __html: content }}
-      className="min-h-8 p-1 leading-relaxed"
-      style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+      dangerouslySetInnerHTML={{ __html: sanitizeDisplayContent(content) }}
+      className="min-h-8 p-1 leading-normal"
+      style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}
     />;
   };
 
@@ -1613,17 +1660,21 @@ const QuotationForm = () => {
                         </button>
 
                         {/* Mark Revised (Bottom-Right) */}
-                        <button
-                          onClick={() => {
-                            handleRevision();
-                            setIsSpeedDialOpen(false);
-                          }}
-                          title="Mark Revised"
-                          className="absolute w-11 h-11 bg-orange-500 hover:bg-orange-600 text-white rounded-full flex items-center justify-center shadow-md transition-all hover:scale-110 active:scale-95 cursor-pointer"
-                          style={{ bottom: '15px', right: '15px' }}
-                        >
-                          <Edit3 size={18} />
-                        </button>
+                         <button
+                           onClick={() => {
+                             if (currentQuotationId) {
+                               handleRevisionFromFirebase(currentQuotationId);
+                             } else {
+                               alert("Please save the quotation first!");
+                             }
+                             setIsSpeedDialOpen(false);
+                           }}
+                           title="Mark Revised"
+                           className="absolute w-11 h-11 bg-orange-500 hover:bg-orange-600 text-white rounded-full flex items-center justify-center shadow-md transition-all hover:scale-110 active:scale-95 cursor-pointer"
+                           style={{ bottom: '15px', right: '15px' }}
+                         >
+                           <Edit3 size={18} />
+                         </button>
                       </div>
                     )}
                   </div>
@@ -1668,14 +1719,9 @@ const QuotationForm = () => {
                   <option value="bottom">Bottom</option>
                 </select>
               </div>
-              <button
-                onClick={() => handleRevision()}
-                className="flex items-center gap-1.5 text-xs text-orange-700 hover:text-orange-900 border border-orange-300 px-3 py-1.5 rounded-md bg-orange-50 hover:bg-orange-100 transition-colors cursor-pointer font-semibold shadow-sm"
-                title="Create a new revision of this quotation"
-              >
-                <Edit3 size={14} />
-                {formData.isRevised ? `Revise Again (Currently R${formData.revisionNumber || 1})` : 'Mark as Revised'}
-              </button>
+              {currentQuotationId && (
+                <button onClick={() => handleRevisionFromFirebase(currentQuotationId)} className="flex items-center gap-1 text-xs text-orange-700 hover:text-orange-955 border border-orange-300 px-3 py-1.5 rounded bg-orange-50 hover:bg-orange-100 cursor-pointer font-semibold"><Edit3 size={14} /> Mark as Revised</button>
+              )}
             </div>
           </div>
         )}
@@ -1696,9 +1742,9 @@ const QuotationForm = () => {
               />
             )}
 
-            <div className="p-8 print:p-0">
+            <div className="p-5 md:p-6 print:p-0">
               {/* Header */}
-              <div className="mb-6">
+              <div className="mb-4">
                 <div className="flex justify-between items-center">
                   <div>
                     <div className="flex items-center gap-2">
@@ -1718,20 +1764,13 @@ const QuotationForm = () => {
                       src={companyLogo}
                       alt="Company Logo"
                       className="object-contain"
-                      style={{ width: '300px', height: '95px' }}
+                      style={{ width: '270px', height: '85px' }}
                     />
                   </div>
                 </div>
 
-                <div className="flex justify-between items-center mt-4">
-                  <div className="flex items-center gap-2">
-                    <div className="text-sm font-bold">No. {quotationInfo.number}</div>
-                    {formData.isRevised && (
-                      <span className="bg-orange-500 text-white text-xs px-2 py-0.5 rounded font-semibold tracking-wide">
-                        REVISED (R{formData.revisionNumber || 1})
-                      </span>
-                    )}
-                  </div>
+                <div className="flex justify-between items-center mt-3">
+                  <div className="text-sm font-bold">No. {quotationInfo.number}</div>
                   <div className="flex items-center gap-2 text-sm font-bold">
                     <span>Dated</span>
                     <input
@@ -1746,8 +1785,8 @@ const QuotationForm = () => {
               </div>
 
               {/* Client Info */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <div className="space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                <div className="space-y-1.5">
                   <FormField
                     label="Business Name"
                     value={formData.clientName}
@@ -1775,12 +1814,12 @@ const QuotationForm = () => {
               </div>
 
               {/* Subscription Table */}
-              <div className="mb-6 custom-header-table-spacing">
-                <div className="flex justify-between items-center mb-3">
+              <div className="mb-4 custom-header-table-spacing">
+                <div className="flex justify-between items-center mb-2">
                   <h3 className="text-base font-bold">SUBSCRIPTION & DESCRIPTION DETAILS</h3>
                   <button
                     onClick={addSubscriptionItem}
-                    className="print:hidden px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 flex items-center gap-1"
+                    className="print:hidden px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 flex items-center gap-1 cursor-pointer"
                   >
                     <Plus size={12} /> Add
                   </button>
@@ -1816,7 +1855,7 @@ const QuotationForm = () => {
                             <button
                               onClick={() => removeSubscriptionItem(item.id)}
                               disabled={subscriptionItems.length === 1}
-                              className="p-1 text-red-500 hover:bg-red-50 rounded disabled:opacity-50"
+                              className="p-1 text-red-500 hover:bg-red-50 rounded disabled:opacity-50 cursor-pointer"
                             >
                               <Trash2 size={12} />
                             </button>
@@ -1829,53 +1868,53 @@ const QuotationForm = () => {
               </div>
 
               {/* Footer Section */}
-              <div className="mt-8">
+              <div className="mt-4">
                 {/* Amount */}
-                <div className="mb-6 border-2 border-black p-4 bg-gray-50">
+                <div className="mb-3 border-2 border-black p-3 bg-gray-50">
                   <div className="flex items-center justify-center gap-6 flex-wrap">
-                    <h3 className="text-2xl font-bold">AMOUNT</h3>
-                    <span className="text-2xl font-bold">{formData.displayCurrency} ({CURRENCY_SYMBOLS[formData.displayCurrency]})</span>
-                    {formData.amount && <span className="text-2xl font-bold">{formatAmountWithCommas(formData.amount)}</span>}
+                    <h3 className="text-xl md:text-2xl font-bold">AMOUNT</h3>
+                    <span className="text-xl md:text-2xl font-bold">{formData.displayCurrency} ({CURRENCY_SYMBOLS[formData.displayCurrency]})</span>
+                    {formData.amount && <span className="text-xl md:text-2xl font-bold">{formatAmountWithCommas(formData.amount)}</span>}
                     {formData.amountCustomText && (
-                      <span className="text-2xl font-bold text-blue-600">- {formData.amountCustomText}</span>
+                      <span className="text-xl md:text-2xl font-bold text-blue-600">- {formData.amountCustomText}</span>
                     )}
                   </div>
                   {formData.amount && (
-                    <div className="text-center text-sm font-semibold mt-2">
+                    <div className="text-center text-sm font-semibold mt-1.5">
                       Amount in words: {numberToWords(formData.amount)}
                     </div>
                   )}
                   <div className="text-center text-sm font-semibold mt-1">(GST EXTRA)</div>
                 </div>
-                <div className="text-center text-sm font-bold text-red-600 mb-6">
+                <div className="text-center text-sm font-bold text-red-600 mb-3">
                   * Cheques should be drawn in favour of BiD
                 </div>
 
                 {/* Payment Details */}
-                <div className="mb-6">
-                  <h3 className="text-lg font-bold mb-3">PAYMENT DETAILS</h3>
-                  <div className="grid grid-cols-2 gap-3 mb-4 text-sm">
-                    <div className="mb-2">
-                      <div className="text-sm font-bold text-gray-700">Bank Name</div>
+                <div className="mb-3">
+                  <h3 className="text-base font-bold mb-2">PAYMENT DETAILS</h3>
+                  <div className="grid grid-cols-2 gap-2 mb-2 text-sm">
+                    <div className="mb-1">
+                      <div className="text-xs font-bold text-gray-700">Bank Name</div>
                       <div className="text-sm font-semibold text-gray-900">{formData.bankName}</div>
                     </div>
-                    <div className="mb-2">
-                      <div className="text-sm font-bold text-gray-700">Account Number</div>
+                    <div className="mb-1">
+                      <div className="text-xs font-bold text-gray-700">Account Number</div>
                       <div className="text-sm font-semibold text-gray-900">{formData.accountNumber}</div>
                     </div>
-                    <div className="mb-2">
-                      <div className="text-sm font-bold text-gray-700">Account Name</div>
+                    <div className="mb-1">
+                      <div className="text-xs font-bold text-gray-700">Account Name</div>
                       <div className="text-sm font-semibold text-gray-900">{formData.accountName}</div>
                     </div>
-                    <div className="mb-2">
-                      <div className="text-sm font-bold text-gray-700">IFSC Code</div>
+                    <div className="mb-1">
+                      <div className="text-xs font-bold text-gray-700">IFSC Code</div>
                       <div className="text-sm font-semibold text-gray-900">{formData.ifscCode}</div>
                     </div>
                   </div>
 
-                  <h3 className="text-lg font-bold mb-3">DECLARATION</h3>
-                  <div className="space-y-2 text-sm leading-relaxed font-medium">
-                    <p className="font-semibold">This is an application for Promotional services to BUILDING INDIA DIGITAL.</p>
+                  <h3 className="text-base font-bold mb-1.5">DECLARATION</h3>
+                  <div className="space-y-1 text-sm leading-snug font-medium">
+                    <p className="font-semibold text-xs text-gray-800">This is an application for Promotional services to BUILDING INDIA DIGITAL.</p>
                     {[
                       "All information including text & picture to be provided by the client who should also be the legal copyright owner.",
                       "BUILDING INDIA DIGITAL shall not be liable for any claims/damages arising out of content posted.",
@@ -1887,7 +1926,7 @@ const QuotationForm = () => {
                       "I allow BUILDING INDIA DIGITAL to make commercial calls to my mobile number(s).",
                       "This declaration holds valid even if numbers registered for NDNC."
                     ].map((term, index) => (
-                      <p key={index} className="flex items-start font-medium">
+                      <p key={index} className="flex items-start font-medium text-xs text-gray-700">
                         <span className="mr-2 font-bold">•</span>
                         <span>{term}</span>
                       </p>
@@ -1896,27 +1935,27 @@ const QuotationForm = () => {
                 </div>
 
                 {/* Signatures */}
-                <div className="grid grid-cols-2 gap-6 mb-6">
+                <div className="grid grid-cols-2 gap-4 mb-4">
                   <div className="text-left">
-                    <h3 className="font-bold text-base mb-3">CLIENT SIGNATURE</h3>
-                    <div className="h-20 flex items-end justify-start">
-                      <div className="w-full border-t border-gray-300 pt-2">
+                    <h3 className="font-bold text-sm mb-2">CLIENT SIGNATURE</h3>
+                    <div className="h-14 flex items-end justify-start">
+                      <div className="w-full border-t border-gray-300 pt-1">
                         <div className="text-xs text-gray-500"></div>
                       </div>
                     </div>
                   </div>
                   <div className="text-left">
-                    <h3 className="font-bold text-base mb-1 text-gray-800">ORGANISATION SIGNATURE</h3>
+                    <h3 className="font-bold text-sm mb-1 text-gray-800">ORGANISATION SIGNATURE</h3>
                     <img
                       src={signatureImage}
                       alt="Organization Signature"
                       style={{
-                        width: '155px',
+                        width: '140px',
                         height: 'auto',
-                        maxHeight: '85px',
+                        maxHeight: '75px',
                         objectFit: 'contain',
                         display: 'block',
-                        marginTop: '4px'
+                        marginTop: '2px'
                       }}
                     />
                   </div>
@@ -1924,7 +1963,7 @@ const QuotationForm = () => {
               </div>
 
               {/* Terms & Conditions */}
-              <div className="border-t pt-4" style={{ pageBreakBefore: 'always' }}>
+              <div className="border-t pt-3" style={{ pageBreakBefore: 'always' }}>
                 <h3 className="text-lg font-bold text-center mb-4">TERMS & CONDITIONS OF SERVICES</h3>
                 <div className="space-y-3 text-sm leading-relaxed font-medium">
                   <div>
@@ -2014,61 +2053,38 @@ const QuotationForm = () => {
                     
                     {openFolders[group.label] && (
                       <div className="divide-y divide-gray-100 bg-white">
-                        {group.quotations.map(quot => {
-                          const quotNum = quot.quotationInfo?.number || quot.number || 'No Quotation Number';
-                          const isRev = Boolean(
-                            quot.formData?.isRevised ||
-                            quot.isRevised ||
-                            quotNum.includes('/REV') ||
-                            quotNum.includes('/Rev') ||
-                            quotNum.includes('/R')
-                          );
-                          let revNum = quot.formData?.revisionNumber ?? quot.revisionNumber;
-                          if (isRev && (!revNum || revNum === 0)) {
-                            const ref = quot.quotationInfo?.referenceNumber || extractRefNumber(quotNum);
-                            if (ref && (ref % 100) > 1) {
-                              revNum = (ref % 100) - 1;
-                            }
-                          }
-
-                          return (
-                            <div key={quot.id || quot.docId} className="p-4 flex items-center justify-between hover:bg-gray-50">
-                              <div>
-                                <div className="font-medium flex items-center gap-2 text-gray-900">
-                                  <span>{quotNum}</span>
-                                  {isRev && (
-                                    <span className="bg-orange-500 text-white text-xs px-2 py-0.5 rounded font-semibold tracking-wide">
-                                      {revNum && revNum > 0 ? `REV R${revNum}` : 'REVISED'}
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="text-sm text-gray-600 mt-1 font-medium">
-                                  {quot.formData?.quotationName ? `${quot.formData.quotationName} (${quot.formData.clientName || 'No Client Name'})` : (quot.formData?.clientName || 'No Client Name')}
-                                </div>
-                                <div className="text-xs text-gray-400 mt-1">Saved on: {new Date(quot.savedAt || Date.now()).toLocaleString()}</div>
+                        {group.quotations.map(quot => (
+                          <div key={quot.id} className="p-4 flex items-center justify-between hover:bg-gray-50">
+                            <div>
+                              <div className="font-medium flex items-center gap-2 text-gray-900">
+                                {quot.quotationInfo?.number || quot.number || 'No Quotation Number'}
+                                {quot.formData?.isRevised && (
+                                  <span className="bg-orange-500 text-white text-xs px-1.5 py-0.5 rounded">R{quot.formData.revisionNumber}</span>
+                                )}
                               </div>
-                              <div className="flex items-center gap-2">
-                                <button onClick={() => loadQuotation(quot)} className="px-4 py-1.5 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-600 transition-colors font-semibold">Load</button>
-                                <button onClick={() => handleRevision(quot)} className="px-4 py-1.5 bg-orange-500 text-white text-sm rounded-md hover:bg-orange-600 transition-colors font-semibold">Revised</button>
+                              <div className="text-sm text-gray-600 mt-1 font-medium">
+                                {quot.formData?.quotationName ? `${quot.formData.quotationName} (${quot.formData.clientName || 'No Client Name'})` : (quot.formData?.clientName || 'No Client Name')}
+                              </div>
+                              <div className="text-xs text-gray-400 mt-1">Saved on: {new Date(quot.savedAt || Date.now()).toLocaleString()}</div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button onClick={() => { loadQuotation(quot); setActiveTab('editor'); }} className="px-4 py-1.5 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-600 transition-colors font-medium font-semibold">Load</button>
+                              <button onClick={() => handleRevisionFromFirebase(quot.id)} className="px-4 py-1.5 bg-orange-500 text-white text-sm rounded-md hover:bg-orange-600 transition-colors font-medium font-semibold">Revised</button>
+                              {quot.formData && (
                                 <button
                                   onClick={async () => {
                                     try {
-                                      const mergedData = { ...INITIAL_FORM_DATA, ...(quot.formData || {}) };
-                                      const mergedInfo = quot.quotationInfo || { number: quotNum, date: quot.date || '' };
-                                      const mergedItems = Array.isArray(quot.subscriptionItems) && quot.subscriptionItems.length > 0
-                                        ? quot.subscriptionItems
-                                        : (Array.isArray(quot.items) ? quot.items : [{ id: 1, serialNumber: '', subscription: '' }]);
-
                                       const blob = await pdf(<QuotationPDF
-                                        formData={mergedData}
-                                        quotationInfo={mergedInfo}
-                                        subscriptionItems={mergedItems}
+                                        formData={quot.formData}
+                                        quotationInfo={quot.quotationInfo || INITIAL_QUOTATION_INFO}
+                                        subscriptionItems={quot.subscriptionItems || []}
                                       />).toBlob();
                                       const url = URL.createObjectURL(blob);
                                       const link = document.createElement('a');
                                       link.href = url;
-                                      const filename = mergedData.quotationName
-                                        ? `${mergedData.quotationName}.pdf`
+                                      const quotNum = quot.quotationInfo?.number || 'quotation';
+                                      const filename = quot.formData.quotationName
+                                        ? `${quot.formData.quotationName}.pdf`
                                         : `quotation-${quotNum.replace(/\//g, '-')}.pdf`;
                                       link.download = filename;
                                       document.body.appendChild(link);
@@ -2080,15 +2096,15 @@ const QuotationForm = () => {
                                       alert('Error generating PDF: ' + error.message);
                                     }
                                   }}
-                                  className="px-4 py-1.5 bg-green-500 text-white text-sm rounded-md hover:bg-green-600 transition-colors font-semibold"
+                                  className="px-4 py-1.5 bg-green-500 text-white text-sm rounded-md hover:bg-green-600 transition-colors font-medium font-semibold"
                                 >
                                   Download PDF
                                 </button>
-                                <button onClick={() => deleteQuotation(quot.id || quot.docId)} className="px-4 py-1.5 bg-white text-red-500 text-sm rounded-md hover:bg-red-50 border border-red-200 transition-colors font-medium">Delete</button>
-                              </div>
+                              )}
+                              <button onClick={() => deleteQuotation(quot.id)} className="px-4 py-1.5 bg-white text-red-500 text-sm rounded-md hover:bg-red-50 border border-red-200 transition-colors font-medium">Delete</button>
                             </div>
-                          );
-                        })}
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
