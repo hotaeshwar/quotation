@@ -324,29 +324,31 @@ const formatAmountWithCommas = (amount) => {
     : num.toLocaleString('en-IN', { maximumFractionDigits: 0 });
 };
 
-const formatCurrencyInText = (text) => {
-  if (!text || typeof text !== 'string') return text || '';
-  let res = text
-    .replace(/(?:₹|&#8377;|\u20B9)\s*/g, 'Rs. ')
-    .replace(/(?:¹|\u00B9)\s*(?=\d)/g, 'Rs. ')
-    .replace(/(?:¹|\u00B9)/g, 'Rs. ');
-  res = res.replace(/Rs\.\s*Rs\.\s*/gi, 'Rs. ');
-  return res;
+const normalizeCurrencyText = (str) => {
+  if (!str) return str;
+  return String(str)
+    .replace(/&#8377;?/g, 'Rs. ')
+    .replace(/&#x20b9;?/gi, 'Rs. ')
+    .replace(/([^\s([{"':])(₹|¹)/g, '$1 Rs. ')
+    .replace(/₹\s*(\d)/g, 'Rs. $1')
+    .replace(/₹\s*/g, 'Rs. ')
+    .replace(/¹\s*(\d)/g, 'Rs. $1')
+    .replace(/¹\s*/g, 'Rs. ');
 };
 
 const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = false, isExtraCompact = false }) => {
-  const htmlString = typeof html === 'string' ? html : (html ? String(html) : '');
-  if (!htmlString.trim()) return <Text style={customStyle}>{""}</Text>;
+  const rawHtml = typeof html === 'string' ? html : (html ? String(html) : '');
+  if (!rawHtml.trim()) return <Text style={customStyle}>{""}</Text>;
   if (typeof window === 'undefined') return <Text style={customStyle}>{""}</Text>;
 
+  const htmlString = normalizeCurrencyText(rawHtml);
   const parser = new window.DOMParser();
   const doc = parser.parseFromString(htmlString, 'text/html');
 
   // Process inline nodes (returns text string or <Text> node with inline formatting)
   const processInlineNode = (node, keyPrefix, inheritedStyle = {}) => {
     if (node.nodeType === 3) {
-      let text = node.textContent.replace(/&nbsp;/g, ' ').replace(/\u00A0/g, ' ');
-      text = formatCurrencyInText(text);
+      const text = normalizeCurrencyText(node.textContent.replace(/&nbsp;/g, ' ').replace(/\u00A0/g, ' '));
       // If node contains only newlines and whitespace (formatting whitespace between HTML tags), ignore it
       if (!text.replace(/[\r\n\t ]+/g, '')) return '';
       // Replace newline characters inside inline text with a space so text doesn't drop to next line
@@ -368,21 +370,10 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
           if (parts.length === 2) {
             const key = parts[0].trim().toLowerCase();
             const val = parts[1].trim();
-            if (key === 'text-align') style.textAlign = val;
-            else if (key === 'color') style.color = val;
+            if (key === 'color') style.color = val;
             else if (key === 'font-weight' && (val === 'bold' || parseInt(val) >= 700)) style.fontFamily = 'Helvetica-Bold';
             else if (key === 'font-style' && val === 'italic') style.fontFamily = style.fontFamily === 'Helvetica-Bold' ? 'Helvetica-BoldOblique' : 'Helvetica-Oblique';
             else if (key === 'text-decoration' && val.includes('underline')) style.textDecoration = 'underline';
-            else if (key === 'text-decoration' && val.includes('line-through')) style.textDecoration = 'line-through';
-            else if (key === 'font-size') {
-              const ptMatch = val.match(/([\d.]+)pt/i);
-              const pxMatch = val.match(/([\d.]+)px/i);
-              if (ptMatch) style.fontSize = parseFloat(ptMatch[1]);
-              else if (pxMatch) style.fontSize = parseFloat(pxMatch[1]) * 0.75;
-            }
-            else if (key === 'background-color' || key === 'background') {
-              style.backgroundColor = val;
-            }
           }
         });
       }
@@ -390,8 +381,6 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
       if (tag === 'strong' || tag === 'b') style.fontFamily = 'Helvetica-Bold';
       if (tag === 'em' || tag === 'i') style.fontFamily = style.fontFamily === 'Helvetica-Bold' ? 'Helvetica-BoldOblique' : 'Helvetica-Oblique';
       if (tag === 'u') style.textDecoration = 'underline';
-      if (tag === 's' || tag === 'del' || tag === 'strike') style.textDecoration = 'line-through';
-      if (tag === 'mark') style.backgroundColor = '#ffeb3b';
 
       const children = Array.from(node.childNodes)
         .map((child, idx) => processInlineNode(child, `${keyPrefix}-${idx}`, style))
@@ -407,301 +396,10 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
   const listItemMargin = 1.5;
   const fallbackMargin = 1.5;
 
-  const renderCellContent = (cellNode, cellKey, baseCellStyle) => {
-    const childElements = Array.from(cellNode.children);
-    const hasBlocks = childElements.some(el =>
-      ['p', 'div', 'ul', 'ol', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(el.tagName.toLowerCase())
-    );
-
-    if (hasBlocks) {
-      const renderedBlocks = childElements.map((childEl, elIdx) => {
-        let elStyle = { ...baseCellStyle };
-        let elAlign = baseCellStyle.textAlign;
-
-        const styleAttr = childEl.getAttribute && childEl.getAttribute('style');
-        if (styleAttr) {
-          styleAttr.split(';').forEach(item => {
-            const parts = item.split(':');
-            if (parts.length === 2) {
-              const k = parts[0].trim().toLowerCase();
-              const v = parts[1].trim();
-              if (k === 'text-align') elAlign = v;
-              else if (k === 'color') elStyle.color = v;
-              else if (k === 'font-weight' && (v === 'bold' || parseInt(v) >= 700)) elStyle.fontFamily = 'Helvetica-Bold';
-            }
-          });
-        }
-        if (childEl.getAttribute && childEl.getAttribute('align')) {
-          elAlign = childEl.getAttribute('align');
-        }
-
-        const inlineNodes = Array.from(childEl.childNodes)
-          .map((c, cIdx) => processInlineNode(c, `${cellKey}-${elIdx}-${cIdx}`, elStyle))
-          .flat(Infinity)
-          .filter(Boolean);
-
-        if (inlineNodes.length === 0) return null;
-
-        return (
-          <View key={`${cellKey}-block-${elIdx}`} style={{ width: '100%', marginBottom: elIdx < childElements.length - 1 ? 1.5 : 0 }}>
-            <Text style={{ ...elStyle, textAlign: elAlign, marginTop: 0, marginBottom: 0, padding: 0 }}>
-              {inlineNodes}
-            </Text>
-          </View>
-        );
-      }).filter(Boolean);
-
-      if (renderedBlocks.length > 0) return renderedBlocks;
-    }
-
-    const inlineNodes = Array.from(cellNode.childNodes)
-      .map((c, cIdx) => processInlineNode(c, `${cellKey}-${cIdx}`, baseCellStyle))
-      .flat(Infinity)
-      .filter(Boolean);
-
-    return (
-      <Text style={{ ...baseCellStyle, marginTop: 0, marginBottom: 0, padding: 0 }}>
-        {inlineNodes.length > 0 ? inlineNodes : ' '}
-      </Text>
-    );
-  };
-
-  const getTableColumnWidths = (tableNode, numCols) => {
-    if (numCols <= 0) return [];
-    const colWidths = new Array(numCols).fill(null);
-
-    const cols = Array.from(tableNode.querySelectorAll('col'));
-    cols.forEach((col, idx) => {
-      if (idx < numCols) {
-        const style = col.getAttribute('style') || '';
-        const wAttr = col.getAttribute('width') || '';
-        const m = style.match(/width:\s*([\d.]+)%/i) || wAttr.match(/([\d.]+)%/);
-        if (m) colWidths[idx] = parseFloat(m[1]);
-      }
-    });
-
-    const rows = Array.from(tableNode.querySelectorAll('tr'));
-    for (const row of rows) {
-      const cells = Array.from(row.children).filter(c => c.tagName && ['td', 'th'].includes(c.tagName.toLowerCase()));
-      cells.forEach((cell, idx) => {
-        if (idx < numCols && colWidths[idx] === null) {
-          const style = cell.getAttribute('style') || '';
-          const wAttr = cell.getAttribute('width') || '';
-          const m = style.match(/width:\s*([\d.]+)%/i) || wAttr.match(/([\d.]+)%/);
-          if (m) {
-            colWidths[idx] = parseFloat(m[1]);
-          }
-        }
-      });
-    }
-
-    const allFound = colWidths.every(w => w !== null && w > 0);
-    if (allFound) {
-      const sum = colWidths.reduce((a, b) => a + b, 0);
-      if (sum > 0) {
-        return colWidths.map(w => `${((w / sum) * 100).toFixed(2)}%`);
-      }
-    }
-
-    const foundSum = colWidths.reduce((a, b) => a + (b || 0), 0);
-    const nullCount = colWidths.filter(w => w === null).length;
-    if (nullCount > 0 && nullCount < numCols && foundSum < 100) {
-      const remEach = (100 - foundSum) / nullCount;
-      return colWidths.map(w => `${(w !== null ? w : remEach).toFixed(2)}%`);
-    }
-
-    if (numCols === 2) {
-      return ['70%', '30%'];
-    }
-    if (numCols === 3) {
-      return ['50%', '25%', '25%'];
-    }
-    const equalPct = (100 / numCols).toFixed(2);
-    return new Array(numCols).fill(`${equalPct}%`);
-  };
-
-  const renderTableNode = (tableNode, keyIndex) => {
-    let rowNodes = [];
-    const directRows = Array.from(tableNode.children).filter(el => el.tagName && el.tagName.toLowerCase() === 'tr');
-    if (directRows.length > 0) {
-      rowNodes = directRows;
-    } else {
-      const sections = Array.from(tableNode.children).filter(el =>
-        el.tagName && ['thead', 'tbody', 'tfoot'].includes(el.tagName.toLowerCase())
-      );
-      sections.forEach(sec => {
-        const secRows = Array.from(sec.children).filter(el => el.tagName && el.tagName.toLowerCase() === 'tr');
-        rowNodes.push(...secRows);
-      });
-      if (rowNodes.length === 0) {
-        rowNodes = Array.from(tableNode.querySelectorAll('tr'));
-      }
-    }
-
-    if (rowNodes.length === 0) return null;
-
-    const validRows = rowNodes.filter(r => {
-      const c = Array.from(r.children).filter(el => el.tagName && ['td', 'th'].includes(el.tagName.toLowerCase()));
-      return c.length > 0;
-    });
-
-    if (validRows.length === 0) return null;
-
-    let maxCols = 0;
-    validRows.forEach(r => {
-      let rowCols = 0;
-      Array.from(r.children).forEach(c => {
-        if (c.tagName && ['td', 'th'].includes(c.tagName.toLowerCase())) {
-          const span = parseInt(c.getAttribute('colspan') || '1', 10);
-          rowCols += isNaN(span) || span < 1 ? 1 : span;
-        }
-      });
-      if (rowCols > maxCols) maxCols = rowCols;
-    });
-
-    if (maxCols === 0) return null;
-
-    const colWidths = getTableColumnWidths(tableNode, maxCols);
-
-    return (
-      <View
-        key={`tbl-${keyIndex}`}
-        style={{
-          width: '100%',
-          marginTop: isExtraCompact ? 1.5 : 2.5,
-          marginBottom: isExtraCompact ? 2.5 : 4,
-          borderWidth: 1,
-          borderColor: '#000000',
-          borderStyle: 'solid',
-        }}
-      >
-        {validRows.map((rowNode, rIdx) => {
-          const isLastRow = rIdx === validRows.length - 1;
-          const cells = Array.from(rowNode.children).filter(c => c.tagName && ['td', 'th'].includes(c.tagName.toLowerCase()));
-          const isInsideThead = rowNode.parentElement && rowNode.parentElement.tagName.toLowerCase() === 'thead';
-          const allTh = cells.every(c => c.tagName.toLowerCase() === 'th');
-          const isHeaderRow = isInsideThead || allTh;
-
-          const rowText = (rowNode.textContent || '').toLowerCase();
-          const isTotalRow = rowText.includes('total');
-
-          let rowBg = isHeaderRow ? '#f0f0f0' : (isTotalRow ? '#f9f9f9' : '#ffffff');
-          const rowStyleAttr = rowNode.getAttribute && rowNode.getAttribute('style');
-          if (rowStyleAttr) {
-            rowStyleAttr.split(';').forEach(item => {
-              const parts = item.split(':');
-              if (parts.length === 2) {
-                const k = parts[0].trim().toLowerCase();
-                const v = parts[1].trim();
-                if (k === 'background-color' || k === 'background') rowBg = v;
-              }
-            });
-          }
-
-          let currentColIdx = 0;
-
-          return (
-            <View
-              key={`tr-${keyIndex}-${rIdx}`}
-              wrap={false}
-              style={{
-                flexDirection: 'row',
-                width: '100%',
-                borderBottomWidth: isLastRow ? 0 : 1,
-                borderBottomColor: '#000000',
-                borderBottomStyle: 'solid',
-                backgroundColor: rowBg,
-                minHeight: 18,
-                alignItems: 'stretch',
-              }}
-            >
-              {cells.map((cellNode, cIdx) => {
-                const tag = cellNode.tagName.toLowerCase();
-                const isTh = tag === 'th';
-                const colSpan = parseInt(cellNode.getAttribute('colspan') || '1', 10);
-                const actualSpan = isNaN(colSpan) || colSpan < 1 ? 1 : colSpan;
-
-                let cellWidthPct = 0;
-                for (let s = 0; s < actualSpan; s++) {
-                  const idx = currentColIdx + s;
-                  if (idx < colWidths.length) {
-                    cellWidthPct += parseFloat(colWidths[idx]);
-                  }
-                }
-                currentColIdx += actualSpan;
-                const isLastCell = cIdx === cells.length - 1 || currentColIdx >= maxCols;
-                const cellWidth = `${Math.min(cellWidthPct, 100).toFixed(2)}%`;
-
-                let cellAlign = isHeaderRow || isTh ? 'center' : 'left';
-                let cellFontFamily = (isHeaderRow || isTh || isTotalRow) ? 'Helvetica-Bold' : 'Helvetica';
-                let cellColor = '#000000';
-                let cellBg = rowBg;
-
-                const styleAttr = cellNode.getAttribute && cellNode.getAttribute('style');
-                if (styleAttr) {
-                  styleAttr.split(';').forEach(item => {
-                    const parts = item.split(':');
-                    if (parts.length === 2) {
-                      const k = parts[0].trim().toLowerCase();
-                      const v = parts[1].trim();
-                      if (k === 'text-align') cellAlign = v;
-                      else if (k === 'color') cellColor = v;
-                      else if (k === 'font-weight' && (v === 'bold' || parseInt(v) >= 700)) cellFontFamily = 'Helvetica-Bold';
-                      else if (k === 'background-color' || k === 'background') cellBg = v;
-                    }
-                  });
-                }
-                if (cellNode.getAttribute && cellNode.getAttribute('align')) {
-                  cellAlign = cellNode.getAttribute('align');
-                }
-                if (cellNode.getAttribute && cellNode.getAttribute('bgcolor')) {
-                  cellBg = cellNode.getAttribute('bgcolor');
-                }
-
-                const baseCellStyle = {
-                  ...customStyle,
-                  fontSize: isExtraCompact ? 8.0 : Math.max((customStyle?.fontSize || 9.5) - 0.5, 8.5),
-                  fontFamily: cellFontFamily,
-                  color: cellColor,
-                  textAlign: cellAlign,
-                  lineHeight: 1.25,
-                  marginTop: 0,
-                  marginBottom: 0,
-                  padding: 0,
-                };
-
-                return (
-                  <View
-                    key={`td-${keyIndex}-${rIdx}-${cIdx}`}
-                    style={{
-                      width: cellWidth,
-                      backgroundColor: cellBg,
-                      borderRightWidth: isLastCell ? 0 : 1,
-                      borderRightColor: '#000000',
-                      borderRightStyle: 'solid',
-                      paddingTop: isExtraCompact ? 1.5 : 2.5,
-                      paddingBottom: isExtraCompact ? 1.5 : 2.5,
-                      paddingLeft: isExtraCompact ? 3 : 4,
-                      paddingRight: isExtraCompact ? 3 : 4,
-                      justifyContent: 'center',
-                    }}
-                  >
-                    {renderCellContent(cellNode, `c-${keyIndex}-${rIdx}-${cIdx}`, baseCellStyle)}
-                  </View>
-                );
-              })}
-            </View>
-          );
-        })}
-      </View>
-    );
-  };
-
-  // Process block node (returns <View> containing <Text> or table)
+  // Process block node (returns <View> containing <Text>)
   const renderBlockNode = (node, keyIndex) => {
     if (node.nodeType === 3) {
-      let text = node.textContent.replace(/&nbsp;/g, ' ').replace(/\u00A0/g, ' ').trim();
-      text = formatCurrencyInText(text);
+      const text = normalizeCurrencyText(node.textContent.replace(/&nbsp;/g, ' ').replace(/\u00A0/g, ' ')).trim();
       if (!text) return null;
       return (
         <View key={`blk-${keyIndex}`} style={{ marginBottom: fallbackMargin, width: '100%' }}>
@@ -715,30 +413,6 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
       if (tag === 'br') {
         return null;
       }
-
-      if (tag === 'table') {
-        return renderTableNode(node, keyIndex);
-      }
-
-      if (['div', 'section'].includes(tag)) {
-        const hasBlockChildren = Array.from(node.children).some(child =>
-          ['table', 'p', 'div', 'ul', 'ol', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'section'].includes(child.tagName.toLowerCase())
-        );
-        if (hasBlockChildren) {
-          const renderedChildren = Array.from(node.childNodes)
-            .map((child, idx) => renderBlockNode(child, `${keyIndex}-${idx}`))
-            .filter(Boolean);
-          if (renderedChildren.length > 0) {
-            return (
-              <View key={`blk-${keyIndex}`} style={{ width: '100%', marginBottom: blockMargin }}>
-                {renderedChildren}
-              </View>
-            );
-          }
-          return null;
-        }
-      }
-
       let blockStyle = { ...customStyle, marginTop: 0, marginBottom: 0, padding: 0 };
       let textAlign = customStyle?.textAlign || 'left';
 
@@ -759,28 +433,10 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
         textAlign = node.getAttribute('align');
       }
 
-      if (['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'div', 'section'].includes(tag)) {
+      if (['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'div'].includes(tag)) {
         const rawText = (node.textContent || '').replace(/[\s\u00A0&nbsp;]+/g, '');
         if (rawText.length === 0) {
           return null; // Ignore completely blank paragraphs
-        }
-
-        let headingMargin = blockMargin;
-        if (tag === 'h1') {
-          blockStyle.fontSize = (customStyle?.fontSize || 9.5) * 1.35;
-          blockStyle.fontFamily = 'Helvetica-Bold';
-          headingMargin = blockMargin * 1.4;
-        } else if (tag === 'h2') {
-          blockStyle.fontSize = (customStyle?.fontSize || 9.5) * 1.2;
-          blockStyle.fontFamily = 'Helvetica-Bold';
-          headingMargin = blockMargin * 1.25;
-        } else if (tag === 'h3') {
-          blockStyle.fontSize = (customStyle?.fontSize || 9.5) * 1.1;
-          blockStyle.fontFamily = 'Helvetica-Bold';
-          headingMargin = blockMargin * 1.15;
-        } else if (['h4', 'h5', 'h6'].includes(tag)) {
-          blockStyle.fontSize = (customStyle?.fontSize || 9.5) * 1.05;
-          blockStyle.fontFamily = 'Helvetica-Bold';
         }
 
         const inlineContent = Array.from(node.childNodes)
@@ -792,7 +448,7 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
           return null;
         }
         return (
-          <View key={`blk-${keyIndex}`} style={{ marginBottom: headingMargin, width: '100%' }}>
+          <View key={`blk-${keyIndex}`} style={{ marginBottom: blockMargin, width: '100%' }}>
             <Text style={{ ...blockStyle, width: '100%', textAlign, marginTop: 0, marginBottom: 0, padding: 0 }}>{inlineContent}</Text>
           </View>
         );
@@ -825,6 +481,230 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
                   <View style={{ flex: 1 }}>
                     <Text style={{ ...blockStyle, textAlign, marginTop: 0, marginBottom: 0, padding: 0 }}>{inlineContent}</Text>
                   </View>
+                </View>
+              );
+            })}
+          </View>
+        );
+      }
+
+      if (tag === 'table') {
+        const rows = [];
+        const collectRows = (el) => {
+          Array.from(el.childNodes).forEach(child => {
+            if (child.nodeType === 1) {
+              const childTag = child.tagName.toLowerCase();
+              if (childTag === 'tr') {
+                rows.push(child);
+              } else if (['thead', 'tbody', 'tfoot'].includes(childTag)) {
+                collectRows(child);
+              }
+            }
+          });
+        };
+        collectRows(node);
+
+        if (rows.length === 0) return null;
+
+        // Parse cells per row
+        const parsedRows = rows.map(tr => {
+          const cells = Array.from(tr.childNodes).filter(
+            c => c.nodeType === 1 && (c.tagName.toLowerCase() === 'td' || c.tagName.toLowerCase() === 'th')
+          );
+          let totalSpan = 0;
+          const cellObjects = cells.map(cell => {
+            const colspan = parseInt(cell.getAttribute('colspan') || '1', 10) || 1;
+            totalSpan += colspan;
+            return {
+              cell,
+              colspan,
+              isTh: cell.tagName.toLowerCase() === 'th' || tr.parentElement?.tagName.toLowerCase() === 'thead',
+            };
+          });
+          return { tr, cells: cellObjects, totalSpan };
+        });
+
+        const maxCols = Math.max(...parsedRows.map(r => r.totalSpan), 1);
+
+        // Determine column widths
+        let baseColWidths = null;
+        for (const r of parsedRows) {
+          if (r.cells.length === maxCols && r.cells.every(c => c.colspan === 1)) {
+            const explicitWidths = r.cells.map(c => {
+              const s = (c.cell.getAttribute && c.cell.getAttribute('style')) || '';
+              const m = s.match(/width:\s*([0-9.]+)%/i);
+              if (m) return parseFloat(m[1]);
+              const w = (c.cell.getAttribute && c.cell.getAttribute('width')) || '';
+              if (w.endsWith('%')) return parseFloat(w);
+              return null;
+            });
+            if (explicitWidths.every(w => w !== null && w > 0)) {
+              const sum = explicitWidths.reduce((a, b) => a + b, 0);
+              if (sum > 0) {
+                baseColWidths = explicitWidths.map(w => (w / sum) * 100);
+                break;
+              }
+            }
+          }
+        }
+        if (!baseColWidths) {
+          baseColWidths = Array(maxCols).fill(100 / maxCols);
+        }
+
+        // Check if table has borders
+        const tableStyle = node.getAttribute && node.getAttribute('style');
+        const borderAttr = node.getAttribute && node.getAttribute('border');
+        const hasBorder = !(borderAttr === '0' || (tableStyle && /border\s*:\s*(none|0)/i.test(tableStyle)));
+
+        return (
+          <View
+            key={`table-${keyIndex}`}
+            style={{
+              width: '100%',
+              marginTop: 2,
+              marginBottom: blockMargin,
+              ...(hasBorder ? {
+                borderWidth: 1,
+                borderColor: '#000000',
+                borderStyle: 'solid',
+              } : {}),
+            }}
+          >
+            {parsedRows.map((r, rIdx) => {
+              let rowBgColor = null;
+              const trStyle = r.tr.getAttribute && r.tr.getAttribute('style');
+              if (trStyle) {
+                trStyle.split(';').forEach(item => {
+                  const parts = item.split(':');
+                  if (parts.length === 2 && (parts[0].trim().toLowerCase() === 'background-color' || parts[0].trim().toLowerCase() === 'background')) {
+                    rowBgColor = parts[1].trim();
+                  }
+                });
+              }
+
+              let colIdx = 0;
+              return (
+                <View
+                  key={`tr-${keyIndex}-${rIdx}`}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'stretch',
+                    ...(hasBorder && rIdx < parsedRows.length - 1 ? {
+                      borderBottomWidth: 1,
+                      borderBottomColor: '#000000',
+                      borderBottomStyle: 'solid',
+                    } : {}),
+                    ...(rowBgColor ? { backgroundColor: rowBgColor } : {}),
+                  }}
+                  wrap={false}
+                >
+                  {r.cells.map((cellObj, cIdx) => {
+                    const { cell, colspan, isTh } = cellObj;
+                    const cellWidth = baseColWidths.slice(colIdx, colIdx + colspan).reduce((a, b) => a + b, 0);
+                    colIdx += colspan;
+
+                    let cellBgColor = isTh ? '#f0f0f0' : null;
+                    let cellTextAlign = isTh ? 'center' : (customStyle?.textAlign || 'left');
+                    let cellFontFamily = isTh ? 'Helvetica-Bold' : (customStyle?.fontFamily || 'Helvetica');
+                    let cellColor = customStyle?.color || '#000000';
+                    let cellVAlign = 'center';
+
+                    const cStyle = cell.getAttribute && cell.getAttribute('style');
+                    if (cStyle) {
+                      cStyle.split(';').forEach(item => {
+                        const parts = item.split(':');
+                        if (parts.length === 2) {
+                          const k = parts[0].trim().toLowerCase();
+                          const v = parts[1].trim();
+                          if (k === 'text-align') cellTextAlign = v.toLowerCase();
+                          else if (k === 'background-color' || k === 'background') cellBgColor = v;
+                          else if (k === 'color') cellColor = v;
+                          else if (k === 'font-weight' && (v.toLowerCase() === 'bold' || parseInt(v) >= 700)) cellFontFamily = 'Helvetica-Bold';
+                          else if (k === 'vertical-align') {
+                            const va = v.toLowerCase();
+                            if (va === 'top') cellVAlign = 'flex-start';
+                            else if (va === 'bottom') cellVAlign = 'flex-end';
+                            else if (va === 'middle' || va === 'center') cellVAlign = 'center';
+                          }
+                        }
+                      });
+                    }
+                    if (cell.getAttribute && cell.getAttribute('align')) {
+                      cellTextAlign = cell.getAttribute('align').toLowerCase();
+                    }
+
+                    const tableCellStyle = {
+                      ...customStyle,
+                      fontSize: isCompact ? 8.5 : 9.0,
+                      lineHeight: 1.25,
+                      fontFamily: cellFontFamily,
+                      color: cellColor,
+                      textAlign: cellTextAlign,
+                      marginTop: 0,
+                      marginBottom: 0,
+                      padding: 0,
+                    };
+
+                    const childNodes = Array.from(cell.childNodes);
+                    const blockChildren = childNodes.filter(c => c.nodeType === 1 && ['p', 'div'].includes(c.tagName.toLowerCase()));
+
+                    let contentNode;
+                    if (blockChildren.length > 1) {
+                      contentNode = childNodes.map((child, bIdx) => {
+                        if (child.nodeType === 1 && ['p', 'div'].includes(child.tagName.toLowerCase())) {
+                          const inlines = Array.from(child.childNodes)
+                            .map((c, i) => processInlineNode(c, `c-p-${keyIndex}-${rIdx}-${cIdx}-${bIdx}-${i}`, tableCellStyle))
+                            .flat(Infinity)
+                            .filter(Boolean);
+                          if (inlines.length === 0) return null;
+                          return (
+                            <View key={`b-${bIdx}`} style={{ marginBottom: bIdx < childNodes.length - 1 ? 1.5 : 0, width: '100%' }}>
+                              <Text style={{ ...tableCellStyle, width: '100%', textAlign: cellTextAlign }}>{inlines}</Text>
+                            </View>
+                          );
+                        }
+                        const inline = processInlineNode(child, `c-ch-${keyIndex}-${rIdx}-${cIdx}-${bIdx}`, tableCellStyle);
+                        if (!inline || (Array.isArray(inline) && inline.length === 0)) return null;
+                        return (
+                          <View key={`b-${bIdx}`} style={{ width: '100%' }}>
+                            <Text style={{ ...tableCellStyle, width: '100%', textAlign: cellTextAlign }}>{inline}</Text>
+                          </View>
+                        );
+                      }).filter(Boolean);
+                    } else {
+                      const inlines = childNodes
+                        .map((child, i) => processInlineNode(child, `c-in-${keyIndex}-${rIdx}-${cIdx}-${i}`, tableCellStyle))
+                        .flat(Infinity)
+                        .filter(Boolean);
+                      contentNode = (
+                        <Text style={{ ...tableCellStyle, width: '100%', textAlign: cellTextAlign }}>
+                          {inlines.length > 0 ? inlines : ""}
+                        </Text>
+                      );
+                    }
+
+                    return (
+                      <View
+                        key={`td-${keyIndex}-${rIdx}-${cIdx}`}
+                        style={{
+                          width: `${cellWidth}%`,
+                          ...(hasBorder && cIdx < r.cells.length - 1 ? {
+                            borderRightWidth: 1,
+                            borderRightColor: '#000000',
+                            borderRightStyle: 'solid',
+                          } : {}),
+                          paddingTop: 3,
+                          paddingBottom: 3,
+                          paddingLeft: 4,
+                          paddingRight: 4,
+                          justifyContent: cellVAlign,
+                          ...(cellBgColor ? { backgroundColor: cellBgColor } : {}),
+                        }}
+                      >
+                        {contentNode}
+                      </View>
+                    );
+                  })}
                 </View>
               );
             })}
@@ -869,53 +749,47 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
 const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
   const getVisibleTextLength = (html) => {
     if (!html) return 0;
-    const trCount = (html.match(/<tr/gi) || []).length;
     const clean = html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/\u00A0/g, ' ');
-    return clean.length + (trCount * 50);
+    return clean.length;
   };
-
-  const hasInnerTable = subscriptionItems.some(item =>
-    (item.subscription && item.subscription.includes('<table')) ||
-    (item.serialNumber && item.serialNumber.includes('<table'))
-  );
 
   const totalTextLength = subscriptionItems.reduce((acc, item) => {
     return acc + getVisibleTextLength(item.serialNumber) + getVisibleTextLength(item.subscription);
   }, 0);
 
   // Dynamic layout settings - comfortable, readable, natural pagination across 2 pages
-  const isCompact = totalTextLength > 250 || subscriptionItems.length > 1 || hasInnerTable;
-  const isExtraCompact = totalTextLength > 500 || (hasInnerTable && totalTextLength > 350) || subscriptionItems.length > 2;
+  const isCompact = totalTextLength > 600 || subscriptionItems.length > 2;
+  const isExtraCompact = false;
   const isUltraCompact = false;
 
-  const logoWidth = isExtraCompact ? 190 : (isCompact ? 210 : 240);
-  const logoHeight = isExtraCompact ? 50 : (isCompact ? 58 : 68);
-  const headerBottomMargin = isExtraCompact ? 4 : (isCompact ? 5 : 8);
-  const headerRowMargin = isExtraCompact ? 1.5 : (isCompact ? 2 : 4);
-  const clientInfoMarginBottom = isExtraCompact ? 2.5 : (isCompact ? 3 : 5);
-  const clientInfoRowMarginBottom = isExtraCompact ? 1 : (isCompact ? 1.5 : 2.5);
-  const tableHeaderMarginTop = isExtraCompact ? 4 : (isCompact ? 6 : 8);
-  const tableMarginBottom = isExtraCompact ? 4 : (isCompact ? 6 : 8);
-  const tableHeaderMinHeight = isExtraCompact ? 20 : 24;
-  const tableCellPadding = isExtraCompact ? 2.5 : (isCompact ? 3.5 : 4.5);
-  const tableFontSize = isExtraCompact ? 8.5 : (isCompact ? 9.0 : 9.5);
-  const amountFontSize = isExtraCompact ? 11 : (isCompact ? 12 : 13.5);
-  const noteFontSize = isExtraCompact ? 9.5 : (isCompact ? 10.5 : 12);
-  const wordAmountFontSize = isExtraCompact ? 8.5 : (isCompact ? 9.5 : 10.5);
-  const amountSectionPadding = isExtraCompact ? 2 : (isCompact ? 3 : 4);
-  const spacingMargin = isExtraCompact ? 3 : (isCompact ? 5 : 8);
-  const sectionHeaderFont = isExtraCompact ? 10 : (isCompact ? 11 : 12.5);
-  const sectionHeaderMarginBottom = isExtraCompact ? 2 : (isCompact ? 3 : 4);
-  const paymentLabelFont = isExtraCompact ? 8.5 : (isCompact ? 9.0 : 10.0);
-  const paymentValFont = isExtraCompact ? 8.5 : (isCompact ? 9.0 : 10.0);
-  const paymentMarginBottom = isExtraCompact ? 1.5 : (isCompact ? 2.5 : 3.5);
-  const declarationTextFont = isExtraCompact ? 8.0 : (isCompact ? 8.5 : 9.5);
-  const declarationItemFont = isExtraCompact ? 7.5 : (isCompact ? 8.0 : 9.0);
-  const declarationItemLineHeight = 1.2;
-  const signatureSectionMarginTop = isExtraCompact ? 8 : (isCompact ? 12 : 16);
-  const signatureImageWidth = isExtraCompact ? 100 : (isCompact ? 110 : 125);
-  const signatureImageHeight = isExtraCompact ? 40 : (isCompact ? 48 : 56);
-  const signatureLabelFont = isExtraCompact ? 9.0 : (isCompact ? 10.0 : 11.0);
+  const logoWidth = isCompact ? 210 : 240;
+  const logoHeight = isCompact ? 58 : 68;
+  const headerBottomMargin = isCompact ? 5 : 8;
+  const headerRowMargin = isCompact ? 2 : 4;
+  const clientInfoMarginBottom = isCompact ? 3 : 5;
+  const clientInfoRowMarginBottom = isCompact ? 1.5 : 2.5;
+  const tableHeaderMarginTop = isCompact ? 6 : 8;
+  const tableMarginBottom = isCompact ? 6 : 8;
+  const tableHeaderMinHeight = 24;
+  const tableCellPadding = isCompact ? 3.5 : 4.5;
+  const tableFontSize = isCompact ? 9.0 : 9.5;
+  const amountFontSize = isCompact ? 12 : 13.5;
+  const noteFontSize = isCompact ? 10.5 : 12;
+  const wordAmountFontSize = isCompact ? 9.5 : 10.5;
+  const amountSectionPadding = isCompact ? 3 : 4;
+  const spacingMargin = isCompact ? 5 : 8;
+  const sectionHeaderFont = isCompact ? 11 : 12.5;
+  const sectionHeaderMarginBottom = isCompact ? 3 : 4;
+  const paymentLabelFont = isCompact ? 9.0 : 10.0;
+  const paymentValFont = isCompact ? 9.0 : 10.0;
+  const paymentMarginBottom = isCompact ? 2.5 : 3.5;
+  const declarationTextFont = isCompact ? 8.5 : 9.5;
+  const declarationItemFont = isCompact ? 8.0 : 9.0;
+  const declarationItemLineHeight = 1.25;
+  const signatureSectionMarginTop = isCompact ? 12 : 16;
+  const signatureImageWidth = isCompact ? 110 : 125;
+  const signatureImageHeight = isCompact ? 48 : 56;
+  const signatureLabelFont = isCompact ? 10.0 : 11.0;
 
   const cellStyle = {
     ...styles.tableCell,
@@ -1028,7 +902,7 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
         {/* Unified Subscription Table (Word Layout Rules) */}
         <View style={[styles.table, { marginTop: tableHeaderMarginTop, marginBottom: tableMarginBottom }]}>
           {/* Table Header */}
-          <View style={[styles.tableHeaderRow, { minHeight: tableHeaderMinHeight }]}>
+          <View style={[styles.tableHeaderRow, { minHeight: tableHeaderMinHeight }]} minPresenceAhead={50}>
             <View style={styles.tableHeaderColLeft}>
               <Text style={[styles.tableHeaderCellText, { fontSize: tableFontSize }]}>SUBSCRIPTION</Text>
             </View>
@@ -1049,6 +923,7 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
                   marginTop: -2,
                 }
               ]}
+              wrap={false}
             >
               {/* Left column label — fixed 20% width */}
               <View
@@ -1112,7 +987,7 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
                 ) : <Text style={styles.amountText}>{""}</Text>}
                 {formData.amountCustomText ? (
                   <Text style={[styles.amountText, { fontSize: noteFontSize, color: '#2563EB', fontFamily: 'Helvetica-Bold' }]}>
-                    - {formatCurrencyInText(formData.amountCustomText)}
+                    - {normalizeCurrencyText(formData.amountCustomText)}
                   </Text>
                 ) : <Text style={styles.amountText}>{""}</Text>}
               </View>
@@ -1249,57 +1124,42 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
 // TinyMCE Editor Component  
 const TinyMCEEditor = ({ content, onClose, onSave }) => {
   const editorRef = useRef(null);
-  const [val, setVal] = useState(content || '');
 
   const handleSave = () => {
-    let finalContent = val;
     if (editorRef.current) {
-      finalContent = editorRef.current.getContent();
+      const editorContent = editorRef.current.getContent();
+      onSave(editorContent);
     }
-    onSave(finalContent);
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl">
-        <div className="flex justify-between items-center mb-4 pb-2 border-b">
-          <div className="flex items-center gap-2">
-            <Edit3 size={20} className="text-blue-600" />
-            <h3 className="text-lg font-semibold text-gray-800">Rich Text Editor</h3>
-          </div>
-          <button onClick={handleSave} className="p-1.5 hover:bg-gray-100 rounded-full text-gray-500 hover:text-gray-700" title="Apply & Close">
-            <X size={20} />
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-auto">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-semibold">Rich Text Editor</h3>
+          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
+            <X size={24} />
           </button>
         </div>
-        <div className="flex-1 min-h-[380px]">
-          <Editor
-            apiKey="g1kgvpz3sdqd2dq5uhk0i206p7ejh2ttx7drt78gh6tzah7g"
-            onInit={(evt, editor) => {
-              editorRef.current = editor;
-            }}
-            initialValue={content}
-            onEditorChange={(newContent) => {
-              setVal(newContent);
-            }}
-            init={{
-              height: 400,
-              menubar: true,
-              plugins: ['advlist', 'autolink', 'lists', 'link', 'image', 'charmap', 'preview', 'anchor', 'searchreplace', 'visualblocks', 'code', 'fullscreen', 'insertdatetime', 'media', 'table', 'code', 'help', 'wordcount'],
-              toolbar: 'undo redo | blocks | bold italic underline strikethrough | alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | table | forecolor backcolor | fontfamily fontsize | link image media | removeformat | help',
-              content_style: 'body { font-family:Arial,sans-serif; font-size:14px; margin: 10px; } table { border-collapse: collapse; width: 100%; } td, th { border: 1px solid #000; padding: 6px; } th { background-color: #f0f0f0; }'
-            }}
-          />
-        </div>
-        <div className="flex justify-between items-center mt-4 pt-3 border-t">
-          <span className="text-xs text-gray-500">Changes will reflect in parent preview and generated PDF.</span>
-          <div className="flex gap-2">
-            <button onClick={onClose} className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 font-medium text-sm">
-              Cancel
-            </button>
-            <button onClick={handleSave} className="px-5 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-semibold text-sm shadow flex items-center gap-1.5">
-              <Save size={16} /> Apply Changes
-            </button>
-          </div>
+        <Editor
+          apiKey="g1kgvpz3sdqd2dq5uhk0i206p7ejh2ttx7drt78gh6tzah7g"
+          onInit={(evt, editor) => editorRef.current = editor}
+          initialValue={content}
+          init={{
+            height: 400,
+            menubar: true,
+            plugins: ['advlist', 'autolink', 'lists', 'link', 'image', 'charmap', 'preview', 'anchor', 'searchreplace', 'visualblocks', 'code', 'fullscreen', 'insertdatetime', 'media', 'table', 'code', 'help', 'wordcount'],
+            toolbar: 'undo redo | blocks | bold italic underline strikethrough | alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | forecolor backcolor | fontfamily fontsize | link image media | removeformat | help',
+            content_style: 'body { font-family:Arial,sans-serif; font-size:14px }'
+          }}
+        />
+        <div className="flex justify-end gap-2 mt-4">
+          <button onClick={onClose} className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600">
+            Cancel
+          </button>
+          <button onClick={handleSave} className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
+            Apply Changes
+          </button>
         </div>
       </div>
     </div>
@@ -1567,7 +1427,7 @@ const QuotationForm = () => {
   };
 
   const updateSubscriptionItem = (id, field, value) => {
-    setSubscriptionItems(prev => prev.map(item => item.id === id ? { ...item, [field]: value } : item));
+    setSubscriptionItems(subscriptionItems.map(item => item.id === id ? { ...item, [field]: value } : item));
   };
 
   const handleFormChange = (field, value) => setFormData(prev => ({ ...prev, [field]: value }));
@@ -1635,7 +1495,7 @@ const QuotationForm = () => {
 
     let updatedQuotationInfo = { ...INITIAL_QUOTATION_INFO, ...(quotation?.quotationInfo || {}) };
     const num = updatedQuotationInfo.number || '';
-
+    
     // Check if it's in the old format (does not contain YYYY/MM/DD)
     // Old format example: "20260630/0"
     const oldFormatMatch = num.match(/^(\d{4})(\d{2})(\d{2})\/(\d+)(.*)$/);
@@ -1653,7 +1513,7 @@ const QuotationForm = () => {
         number: `${year}/${month}/${day}/${refNum}${suffix}`,
         referenceNumber: refNum
       };
-
+      
       // Also update formData if we parsed a revision from the number
       if (isRevised && !quotation.formData?.isRevised) {
         setFormData(prev => ({ ...prev, isRevised: true }));
@@ -1702,7 +1562,7 @@ const QuotationForm = () => {
         date: date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '-'),
         referenceNumber: newRefNum
       });
-
+      
       setCurrentQuotationId(null); // Clear ID so it will save as a new document
       setActiveTab('editor'); // Switch to editor tab
       alert(`Quotation loaded from database and marked as Revision ${nextRevision} (ending in ${String(nextRevision + 1).padStart(2, '0')}).`);
@@ -1733,9 +1593,9 @@ const QuotationForm = () => {
   };
 
   const openTextEditor = (id, field) => {
+    if (!isEditing) return;
     const item = subscriptionItems.find(i => i.id === id);
     if (item) {
-      if (!isEditing) setIsEditing(true);
       setEditorContent(item[field] || '');
       setShowTextEditor({ id, field });
     }
@@ -1761,15 +1621,13 @@ const QuotationForm = () => {
   };
 
   const renderSubscriptionContent = (item, field) => {
-    const rawContent = item[field];
-    if (!rawContent && isEditing) return <div className="text-gray-500 italic min-h-8 p-1 cursor-pointer">Click to add {field === 'serialNumber' ? 'subscription' : 'description details'}...</div>;
-    if (!rawContent && !isEditing) return <div className="min-h-8 p-1">&nbsp;</div>;
-    const content = formatCurrencyInText(rawContent);
-    const hasTable = content && content.includes('<table');
+    const content = item[field];
+    if (!content && isEditing) return <div className="text-gray-500 italic min-h-8 p-1 cursor-pointer">Click to add {field === 'serialNumber' ? 'subscription' : 'description details'}...</div>;
+    if (!content && !isEditing) return <div className="min-h-8 p-1">&nbsp;</div>;
     return <div
       dangerouslySetInnerHTML={{ __html: content }}
       className="min-h-8 p-1 leading-relaxed"
-      style={{ whiteSpace: hasTable ? 'normal' : 'pre-wrap', wordBreak: 'break-word' }}
+      style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
     />;
   };
 
@@ -1782,10 +1640,11 @@ const QuotationForm = () => {
             <div className="flex gap-4">
               <button
                 onClick={() => setActiveTab('saved')}
-                className={`px-3 py-1.5 rounded flex items-center gap-2 text-xs font-semibold transition-colors cursor-pointer ${activeTab === 'saved'
+                className={`px-3 py-1.5 rounded flex items-center gap-2 text-xs font-semibold transition-colors cursor-pointer ${
+                  activeTab === 'saved'
                     ? 'bg-blue-600 text-white shadow-sm'
                     : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                  }`}
+                }`}
               >
                 <FolderOpen size={14} />
                 Saved Quotations ({savedQuotations.length})
@@ -1809,10 +1668,11 @@ const QuotationForm = () => {
             <div className="flex items-center gap-4">
               <button
                 onClick={() => setActiveTab('editor')}
-                className={`px-3 py-1.5 rounded flex items-center gap-2 text-xs font-semibold transition-colors cursor-pointer ${activeTab === 'editor'
+                className={`px-3 py-1.5 rounded flex items-center gap-2 text-xs font-semibold transition-colors cursor-pointer ${
+                  activeTab === 'editor'
                     ? 'bg-blue-600 text-white shadow-sm'
                     : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                  }`}
+                }`}
               >
                 <FileText size={14} />
                 Form Editor
@@ -1869,21 +1729,21 @@ const QuotationForm = () => {
                         </button>
 
                         {/* Mark Revised (Bottom-Right) */}
-                        <button
-                          onClick={() => {
-                            if (currentQuotationId) {
-                              handleRevisionFromFirebase(currentQuotationId);
-                            } else {
-                              alert("Please save the quotation first!");
-                            }
-                            setIsSpeedDialOpen(false);
-                          }}
-                          title="Mark Revised"
-                          className="absolute w-11 h-11 bg-orange-500 hover:bg-orange-600 text-white rounded-full flex items-center justify-center shadow-md transition-all hover:scale-110 active:scale-95 cursor-pointer"
-                          style={{ bottom: '15px', right: '15px' }}
-                        >
-                          <Edit3 size={18} />
-                        </button>
+                         <button
+                           onClick={() => {
+                             if (currentQuotationId) {
+                               handleRevisionFromFirebase(currentQuotationId);
+                             } else {
+                               alert("Please save the quotation first!");
+                             }
+                             setIsSpeedDialOpen(false);
+                           }}
+                           title="Mark Revised"
+                           className="absolute w-11 h-11 bg-orange-500 hover:bg-orange-600 text-white rounded-full flex items-center justify-center shadow-md transition-all hover:scale-110 active:scale-95 cursor-pointer"
+                           style={{ bottom: '15px', right: '15px' }}
+                         >
+                           <Edit3 size={18} />
+                         </button>
                       </div>
                     )}
                   </div>
@@ -1942,7 +1802,6 @@ const QuotationForm = () => {
           <div className="bg-white shadow-lg rounded-lg overflow-hidden max-w-4xl mx-auto print:shadow-none print:max-w-none">
             {showTextEditor.id && (
               <TinyMCEEditor
-                key={`editor-${showTextEditor.id}-${showTextEditor.field}`}
                 content={editorContent}
                 onClose={closeTextEditor}
                 onSave={(content) => {
@@ -2260,7 +2119,7 @@ const QuotationForm = () => {
                       </div>
                       <span className="text-gray-400 font-bold">{openFolders[group.label] ? '▼' : '▶'}</span>
                     </button>
-
+                    
                     {openFolders[group.label] && (
                       <div className="divide-y divide-gray-100 bg-white">
                         {group.quotations.map(quot => (
