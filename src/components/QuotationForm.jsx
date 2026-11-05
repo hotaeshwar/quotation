@@ -394,10 +394,10 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
     return '';
   };
 
-  const blockMargin = isCompact ? 0.8 : 2.0;
-  const listMargin = isCompact ? 0.8 : 2.0;
-  const listItemMargin = isCompact ? 0.4 : 1.5;
-  const fallbackMargin = isCompact ? 0.8 : 1.5;
+  const blockMargin = isCompact ? 1.6 : 2.2;
+  const listMargin = isCompact ? 1.6 : 2.2;
+  const listItemMargin = isCompact ? 1.0 : 1.8;
+  const fallbackMargin = isCompact ? 1.2 : 1.8;
 
   const BLOCK_TAGS = ['p', 'div', 'ul', 'ol', 'table', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'section', 'article', 'header', 'footer'];
 
@@ -435,13 +435,13 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
       return `${(100 / totalCols).toFixed(1)}%`;
     };
 
-    const tableFontSize = isCompact ? 7.8 : 9.0;
+    const tableFontSize = isCompact ? 8.6 : 9.0;
 
     return (
       <View key={`tbl-${keyIndex}`} style={{
         width: '100%',
-        marginTop: isCompact ? 1.5 : 3,
-        marginBottom: isCompact ? 2.5 : 4,
+        marginTop: isCompact ? 2.0 : 3,
+        marginBottom: isCompact ? 3.0 : 4,
         borderTopWidth: 1,
         borderTopColor: '#000000',
         borderLeftWidth: 1,
@@ -464,7 +464,7 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
               backgroundColor: rowBg,
               borderBottomWidth: isLastRow ? 0 : 1,
               borderBottomColor: '#000000',
-              minHeight: isCompact ? 14 : 18,
+              minHeight: isCompact ? 15 : 18,
               alignItems: 'center',
             }}>
               {row.cells.map((cell, cIdx) => {
@@ -492,8 +492,8 @@ const HtmlToPdf = ({ html, customStyle, verticalAlignment = 'top', isCompact = f
                 return (
                   <View key={`td-${keyIndex}-${rIdx}-${cIdx}`} style={{
                     width: colWidth,
-                    paddingVertical: isCompact ? 1.2 : 2.5,
-                    paddingHorizontal: isCompact ? 3.5 : 5,
+                    paddingVertical: isCompact ? 1.6 : 2.5,
+                    paddingHorizontal: isCompact ? 4.0 : 5,
                     borderRightWidth: isLastCol ? 0 : 1,
                     borderRightColor: '#000000',
                     justifyContent: 'center',
@@ -695,9 +695,9 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
   const clientInfoRowMarginBottom = 1.2;
   const tableHeaderMarginTop = 3;
   const tableMarginBottom = 4;
-  const tableHeaderMinHeight = 18;
-  const tableCellPadding = 2.8;
-  const tableFontSize = 8.5;
+  const tableHeaderMinHeight = isCompact ? 19 : 22;
+  const tableCellPadding = isCompact ? 3.2 : 4.0;
+  const tableFontSize = 9.15;
   const amountFontSize = 12.0;
   const noteFontSize = 10.5;
   const wordAmountFontSize = 9.5;
@@ -719,7 +719,7 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
   const cellStyle = {
     ...styles.tableCell,
     fontSize: tableFontSize,
-    lineHeight: 1.18,
+    lineHeight: 1.26,
     marginTop: 0,
     marginBottom: 0,
     padding: 0
@@ -869,7 +869,7 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
                   html={item.serialNumber}
                   customStyle={{ ...cellStyle, fontFamily: 'Helvetica-Bold', textAlign: 'center' }}
                   verticalAlignment={formData.verticalAlignment}
-                  isCompact={false}
+                  isCompact={isCompact}
                 />
               </View>
               {/* Right column content — 80% width */}
@@ -887,7 +887,7 @@ const QuotationPDF = ({ formData, quotationInfo, subscriptionItems }) => {
                   html={item.subscription}
                   customStyle={{ ...cellStyle, fontFamily: 'Helvetica' }}
                   verticalAlignment={formData.verticalAlignment}
-                  isCompact={false}
+                  isCompact={isCompact}
                 />
               </View>
             </View>
